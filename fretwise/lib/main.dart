@@ -142,7 +142,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
                     height: 52,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: const Color(0xFF2F6F73),
+                      color: const Color(0xFF5E8275),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.28),

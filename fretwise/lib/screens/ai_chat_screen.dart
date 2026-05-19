@@ -119,7 +119,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                 width: 32, height: 32,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  color: const Color(0xFF2F6F73),
+                  color: const Color(0xFF5E8275),
                 ),
                 child: const Icon(Icons.chat_bubble_outline, size: 15, color: Colors.white),
               ),
@@ -216,7 +216,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                           maxWidth: MediaQuery.of(ctx).size.width * 0.78,
                         ),
                         decoration: BoxDecoration(
-                          color: isUser ? const Color(0xFF2F6F73) : t.surface,
+                          color: isUser ? const Color(0xFF5E8275) : t.surface,
                           borderRadius: BorderRadius.only(
                             topLeft: Radius.circular(isUser ? 18 : 4),
                             topRight: Radius.circular(isUser ? 4 : 18),
@@ -281,7 +281,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
                         width: 44, height: 44,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
-                          color: Color(0xFF2F6F73),
+                          color: Color(0xFF5E8275),
                         ),
                         child: const Icon(Icons.send, size: 17, color: Colors.white),
                       ),
@@ -304,7 +304,7 @@ class _AIAvatar extends StatelessWidget {
       width: 28, height: 28,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(9),
-        color: const Color(0xFF2F6F73),
+        color: const Color(0xFF5E8275),
       ),
       child: const Icon(Icons.chat_bubble_outline, size: 13, color: Colors.white),
     );
