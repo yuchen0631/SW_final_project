@@ -292,7 +292,6 @@ class _PracticingScreenState extends State<PracticingScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _running ? t.accent : t.surfaceAlt,
-                          boxShadow: _running ? [BoxShadow(color: t.accent.withValues(alpha: 0.4), blurRadius: 20)] : null,
                         ),
                         child: Icon(
                           _running ? Icons.pause : Icons.play_arrow,
@@ -461,12 +460,8 @@ class _PracticingScreenState extends State<PracticingScreen> {
               width: 52, height: 52,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF1A7A5E), Color(0xFF2EAD85)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                boxShadow: [BoxShadow(color: const Color(0xFF1A7A5E).withValues(alpha: 0.45), blurRadius: 20)],
+                color: const Color(0xFF5E8275),
+                boxShadow: [BoxShadow(color: const Color(0xFF5E8275).withValues(alpha: 0.4), blurRadius: 20)],
               ),
               child: const Icon(Icons.chat_bubble_outline, size: 22, color: Colors.white),
             ),

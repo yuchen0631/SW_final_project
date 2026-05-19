@@ -222,11 +222,7 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                         children: [
                           Container(
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF1A7A5E), Color(0xFF2EAD85)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              ),
+                              color: const Color(0xFF5E8275),
                               borderRadius: BorderRadius.circular(14),
                             ),
                           ),
