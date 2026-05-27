@@ -1,0 +1,142 @@
+=== Implement later: starCount & equipments (from store) ===
+
+users
+└── {userId}
+    ├── displayName
+    ├── email
+    ├── createdAt
+    ├── updatedAt
+    ├── activePlanId
+    ├── currentStreak
+    ├── totalPracticeMinutes
+    ├── profile
+    │   └── main  // 配合 firebase 的架構需要這層
+    │       ├── skillLevel
+    │       ├── experienceSummary
+    │       ├── currentGoals
+    │       ├── weakTechniques
+    │       ├── strongTechniques
+    │       ├── preferredSessionMinutes
+    │       ├── preferredDayAndTime      // to be added
+    │       └── updatedAt
+    ├── preference
+    │   └── main
+    │       ├── favoriteGenres
+    │       ├── favoriteArtists
+    │       ├── dislikedGenres
+    │       ├── dislikedArtists
+    │       ├── preferredMaterialTypes
+    │       ├── tempoPreference
+    │       └── updatedAt
+    ├── songLibrary  // 每首歌的演奏／練習資訊
+    │   └── {songId}
+    │       ├── title
+    │       ├── artist
+    │       ├── durationSec
+    │       ├── bpm
+    │       ├── defaultSectionLabel
+    │       ├── progressPercent
+    │       ├── lastPracticedAt
+    │       ├── firstSessionCompletedAt
+    │       ├── deadlineDate
+    │       ├── source
+    │       ├── isArchived
+    │       ├── isFavorite
+    │       ├── createdAt
+    │       ├── updatedAt
+    │       └── practiceMaterials
+    │           └── {materialId}
+    │               ├── type
+    │               ├── title
+    │               ├── description
+    │               ├── resourceUrl
+    │               ├── thumbnailUrl  // can remove this maybe?
+    │               ├── sectionLabel
+    │               ├── active
+    │               ├── whyChosen
+    │               ├── generatedReason
+    │               ├── requestedByChat
+    │               ├── requestText
+    │               ├── sourceContext
+    │               ├── sourceProvider
+    │               ├── generatedFromOverride
+    │               └── createdAt
+    ├── songProfiles  // 針對使用者 每首歌的難易、重點練習
+    │   └── {songId}
+    │       ├── difficultyForUser
+    │       ├── problemAreas
+    │       ├── strengthAreas
+    │       ├── recommendedFocus
+    │       ├── preferredMaterialTypes
+    │       ├── latestAiSummary
+    │       └── updatedAt
+    ├── sessions
+    │   └── {sessionId}
+    │       ├── songId
+    │       ├── durationSec
+    │       ├── userNote
+    │       ├── deadlineDate
+    │       ├── recordingUrls
+    │       ├── sessionInfo
+    │       │   ├── aiComment
+    │       │   ├── detectedMood
+    │       │   ├── nextFocus
+    │       │   ├── improvements
+    │       │   ├── warnings
+    │       │   └── generatedAt
+    │       ├── startedAt
+    │       └── endedAt
+    ├── practicePlans
+    │   └── {planId}
+    │       ├── title
+    │       ├── summary
+    │       ├── activeFromDate
+    │       ├── activeToDate
+    │       ├── linkedSongIds
+    │       ├── status
+    │       ├── generatedReason
+    │       └── updatedAt
+    ├── practiceDays
+    │   └── {dayId}
+    │       ├── planId
+    │       ├── date
+    │       ├── status
+    │       ├── plannedMinutes
+    │       ├── linkedSongIds
+    │       ├── completedMinutes
+    │       ├── completedSessionCount
+    │       ├── completedSongIds
+    │       └── updatedAt
+    ├── practiceTasks
+    │   └── {taskId}
+    │       ├── planId
+    │       ├── dayId
+    │       ├── originalDayId
+    │       ├── rescheduledFromDayId
+    │       ├── songId
+    │       ├── title
+    │       ├── instructions
+    │       ├── minutes
+    │       ├── materialId
+    │       ├── orderIndex
+    │       ├── status
+    │       └── updatedAt
+    ├── feed
+    │   └── {feedItemId}
+    │       ├── songId
+    │       ├── title
+    │       ├── artist
+    │       ├── genre
+    │       ├── description
+    │       ├── videoUrl
+    │       ├── thumbnailUrl
+    │       ├── bpm
+    │       ├── actionState
+    │       ├── rankScore
+    │       └── createdAt
+    └── chatLogs
+        └── {chatLogId}
+            ├── fromScreen
+            ├── activeSongId
+            ├── messages
+            └── createdAt
