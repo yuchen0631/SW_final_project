@@ -16,8 +16,11 @@ import 'screens/ai_chat_screen.dart';
 
 void main() {
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider(create: (_) => AiMaterialService()),
+      ],
       child: const FretwiseApp(),
     ),
   );
@@ -197,6 +200,8 @@ class _FretwiseShellState extends State<FretwiseShell> {
         return ProfileScreen(t: t, navigate: _navigate, coins: state.coins, ownedItems: state.ownedItems, diaryEntries: state.diaryEntries);
 
       case 'practicing':
+        final aiService = context.watch<AiMaterialService>();
+
         return PracticingScreen(
           t: t,
           navigate: _navigate,
@@ -204,6 +209,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
           artist: props['artist'] as String? ?? 'Oasis',
           bpm: props['bpm'] as int? ?? 87,
           onOpenAI: _openAI,
+          practiceMaterial: aiService.currentMaterial,
         );
 
       case 'sessionComplete':

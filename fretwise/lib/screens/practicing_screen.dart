@@ -6,6 +6,9 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:mic_stream/mic_stream.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import '../theme.dart';
+import 'package:provider/provider.dart';
+import '../models/app_state.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class PracticingScreen extends StatefulWidget {
   final AppTheme t;
@@ -15,6 +18,8 @@ class PracticingScreen extends StatefulWidget {
   final int bpm;
   final VoidCallback onOpenAI;
 
+  final Map<String, dynamic>? practiceMaterial;
+
   const PracticingScreen({
     super.key,
     required this.t,
@@ -23,6 +28,7 @@ class PracticingScreen extends StatefulWidget {
     required this.artist,
     required this.bpm,
     required this.onOpenAI,
+    this.practiceMaterial,
   });
 
   @override
@@ -32,11 +38,14 @@ class PracticingScreen extends StatefulWidget {
 class _PracticingScreenState extends State<PracticingScreen> {
   int _seconds = 0;
   bool _running = true;
-  bool _videoPlaying = false;
+  //bool _videoPlaying = false;
   bool _recording = false;
   String? _activePopup; // 'tuner' | 'metronome' | null
   static bool _strumModalDismissed = false;
   bool _showStrumModal = !_strumModalDismissed;
+
+  YoutubePlayerController? _ytController;
+  String? _lastVideoId; // 用來記錄上一次播放的 ID，避免重複初始化
 
   // Metronome
   int _metroBpm = 80;
@@ -73,6 +82,15 @@ class _PracticingScreenState extends State<PracticingScreen> {
     _metroAudio!.init();
   }
 
+  void _triggerBackgroundAiWorkflow() {
+    debugPrint('觸發 AI flow：完成 Session，開始在背景生成新教材...');
+
+    Provider.of<AiMaterialService>(context, listen: false).generateMaterial(
+      song: widget.title,
+      artist: widget.artist,
+    );
+  }
+
   void _dismissStrumModal() {
     _strumModalDismissed = true;
     setState(() => _showStrumModal = false);
@@ -84,6 +102,7 @@ class _PracticingScreenState extends State<PracticingScreen> {
     _metroTimer?.cancel();
     _micSub?.cancel();
     _metroAudio?.release();
+    _ytController?.close();
     super.dispose();
   }
 
@@ -109,6 +128,25 @@ class _PracticingScreenState extends State<PracticingScreen> {
     _metroTimer = null;
   }
 
+  void _initYoutubeController(String url) {
+    final videoId = YoutubePlayerController.convertUrlToId(url);
+    if (videoId != null && videoId != _lastVideoId) {
+      _lastVideoId = videoId;
+      
+      _ytController?.close();
+
+      _ytController = YoutubePlayerController.fromVideoId(
+        videoId: videoId,
+        autoPlay: false,
+        params: const YoutubePlayerParams(
+          mute: false,
+          showControls: true,
+          showFullscreenButton: true,
+        ),
+      );
+    }
+  }
+
   Future<void> _startTuner() async {
     if (!mounted) return;
     setState(() {
@@ -122,10 +160,7 @@ class _PracticingScreenState extends State<PracticingScreen> {
         sampleRate: 44100,
         audioFormat: AudioFormat.ENCODING_PCM_16BIT,
       );
-      if (stream == null) {
-        if (mounted) setState(() => _tunerPermDenied = true);
-        return;
-      }
+      
       _micSub = stream.listen(
         (chunk) {
           _rawBuffer.addAll(chunk);
@@ -226,6 +261,18 @@ class _PracticingScreenState extends State<PracticingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final aiService = Provider.of<AiMaterialService>(context);
+    final practiceMaterial = aiService.currentMaterial;
+
+    final String videoUrl = practiceMaterial?['url'] ?? 
+        'https://www.youtube.com/watch?v=bx1Bh8ZvH84';
+
+    if (practiceMaterial?['type'] == 'image') {
+      // 圖片模式不需初始化播放器
+    } else {
+      _initYoutubeController(videoUrl);
+    }
+
     return Stack(
       children: [
         Column(
@@ -322,68 +369,17 @@ class _PracticingScreenState extends State<PracticingScreen> {
             // Video
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: GestureDetector(
-                onTap: () => setState(() => _videoPlaying = !_videoPlaying),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF2A2420), Color(0xFF1A1510)],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Center(
-                          child: Container(
-                            width: 52, height: 52,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.18),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
-                            ),
-                            child: Icon(
-                              _videoPlaying ? Icons.pause : Icons.play_arrow,
-                              size: 22, color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0, left: 0, right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${widget.title} — Tutorial',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                                Text('${widget.artist} · Tap to ${_videoPlaying ? "pause" : "play"}',
-                                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.65))),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+              child: AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1A1A1A),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    // 呼叫動態渲染 Widget
+                    child: _buildMaterialContent(practiceMaterial, aiService.isGenerating),
                   ),
                 ),
               ),
@@ -430,7 +426,10 @@ class _PracticingScreenState extends State<PracticingScreen> {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () {
-                    _running = false;
+                    setState(() => _running = false);
+                    
+                    _triggerBackgroundAiWorkflow(); 
+
                     widget.navigate('sessionComplete', props: {
                       'title': widget.title,
                       'artist': widget.artist,
@@ -438,12 +437,12 @@ class _PracticingScreenState extends State<PracticingScreen> {
                     });
                   },
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: t.border, width: 1.5),
+                    side: BorderSide(color: widget.t.border, width: 1.5),
                     padding: const EdgeInsets.symmetric(vertical: 13),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                   child: Text('Finish Session',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text)),
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: widget.t.text)),
                 ),
               ),
             ),
@@ -555,6 +554,49 @@ class _PracticingScreenState extends State<PracticingScreen> {
           ),
       ],
     );
+  }
+
+  Widget _buildMaterialContent(Map<String, dynamic>? material, bool isGenerating) {
+    if (isGenerating && material == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70)),
+            SizedBox(height: 12),
+            Text('AI 正在為您搜尋最佳練習教材...', style: TextStyle(color: Colors.white70, fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    final type = material?['type'] ?? 'video';
+    final url = material?['url'];
+
+    if (type == 'image') {
+      // 🖼️ 樂譜/指法圖片模式
+      return url != null
+          ? Image.network(
+              url,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Text('無法載入樂譜圖片', style: TextStyle(color: Colors.white70)),
+              ),
+            )
+          : const Center(child: Text('圖片網址異常', style: TextStyle(color: Colors.white70)));
+    } else {
+
+      if (_ytController == null) {
+        return const Center(
+          child: Text('無法解析影片網址', style: TextStyle(color: Colors.white70)),
+        );
+      }
+
+      // 使用套件提供的播放器 Widget
+      return YoutubePlayer(
+        controller: _ytController!,
+      );
+    }
   }
 }
 
