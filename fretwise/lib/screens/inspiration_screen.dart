@@ -1,25 +1,18 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:fretwise/models/song.dart';
+import 'package:provider/provider.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../theme.dart';
-import '../widgets/album_art.dart';
-import '../models/song.dart';
+import '../models/app_state.dart';
 
 class InspirationScreen extends StatefulWidget {
   final AppTheme t;
   final void Function(String screen, {Map<String, dynamic>? props}) navigate;
-  final List<Song> extraSongs;
-  final Set<String> removedLibrarySongs;
-  final void Function(Song) onAddSong;
-  final void Function(String title) onRemoveSong;
 
   const InspirationScreen({
     super.key,
     required this.t,
     required this.navigate,
-    required this.extraSongs,
-    required this.removedLibrarySongs,
-    required this.onAddSong,
-    required this.onRemoveSong,
   });
 
   @override
@@ -27,265 +20,248 @@ class InspirationScreen extends StatefulWidget {
 }
 
 class _InspirationScreenState extends State<InspirationScreen> {
-  int _current = 0;
-  bool _playing = true;
-
-  AppTheme get t => widget.t;
-
-  bool _isInLibrary(String title) {
-    final key = title.toLowerCase();
-    if (widget.extraSongs.any((s) => s.title.toLowerCase() == key)) return true;
-    if (widget.removedLibrarySongs.contains(title)) return false;
-    return Song.library.any((s) => s.title.toLowerCase() == key);
-  }
-
-  void _handleButtonTap(BuildContext context, ({String title, String artist, String genre, int bpm, int seed, String desc}) song) {
-    final title = song.title;
-
-    if (!_isInLibrary(title)) {
-      final rng = Random();
-      final mins = 2 + rng.nextInt(5);
-      final secs = rng.nextInt(60);
-      widget.onAddSong(Song(
-        title: title,
-        artist: song.artist,
-        seed: song.seed,
-        bpm: song.bpm,
-        duration: '$mins:${secs.toString().padLeft(2, '0')}',
-        progress: 5 + rng.nextInt(91),
-      ));
-      setState(() {});
-      return;
-    }
-
-    final isExtra = widget.extraSongs.any((s) => s.title.toLowerCase() == title.toLowerCase());
-    if (isExtra) {
-      widget.onRemoveSong(title);
-      setState(() {});
-      return;
-    }
-
-    // Base library song — confirm before removing
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Remove from library?'),
-        content: Text('"$title" will be removed from your library.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              widget.onRemoveSong(title);
-              setState(() {});
-            },
-            child: Text('Remove', style: TextStyle(color: widget.t.accent)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static const _songs = [
-    (title: 'Wish You Were Here', artist: 'Pink Floyd', genre: 'Classic Rock', bpm: 98, seed: 6, desc: 'Iconic 12-string acoustic intro — great for fingerpicking practice.'),
-    (title: 'Blackbird', artist: 'The Beatles', genre: 'Folk / Rock', bpm: 96, seed: 1, desc: 'Beautiful fingerstyle piece using open G tuning. Beginner-friendly.'),
-    (title: 'Hotel California', artist: 'Eagles', genre: 'Soft Rock', bpm: 75, seed: 2, desc: 'Legendary outro solo with smooth bends and clean tone.'),
-    (title: 'Stairway to Heaven', artist: 'Led Zeppelin', genre: 'Hard Rock', bpm: 82, seed: 8, desc: 'Timeless fingerpicked arpeggio intro — every guitarist\'s milestone.'),
-  ];
-
-  static const _palettes = [
-    (from: Color(0xFF1A2A1A), to: Color(0xFF0D1A0D), accent: Color(0xFF4A7C59)),
-    (from: Color(0xFF1A1A2A), to: Color(0xFF0D0D1A), accent: Color(0xFF4A5C7C)),
-    (from: Color(0xFF2A1A0D), to: Color(0xFF1A0D05), accent: Color(0xFFC96A3A)),
-    (from: Color(0xFF1A0D2A), to: Color(0xFF0D051A), accent: Color(0xFF7A4AC9)),
-  ];
+  bool _isGenerating = false;
 
   @override
   Widget build(BuildContext context) {
-    final song = _songs[_current];
-    final pal = _palettes[_current];
+    final appState = context.watch<AppState>();
 
-    return Column(
+    // 💡 改用 StreamBuilder 監聽 Firebase 裡面的真實資料
+    return StreamBuilder<List<FeedItem>>(
+      stream: appState.feedStream,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator(color: widget.t.accent));
+        }
+
+        final feedItems = snapshot.data ?? [];
+
+        // 1. 如果資料庫是空的，顯示「生成推薦」按鈕
+        if (feedItems.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.video_library_outlined, size: 64, color: widget.t.textMuted),
+                const SizedBox(height: 16),
+                Text('No inspiration feed yet.', style: TextStyle(color: widget.t.textSec, fontSize: 16)),
+                const SizedBox(height: 24),
+                if (_isGenerating)
+                  Column(
+                    children: [
+                      CircularProgressIndicator(color: widget.t.accent),
+                      const SizedBox(height: 16),
+                      Text('AI is picking songs and fetching videos...', style: TextStyle(color: widget.t.accent)),
+                    ],
+                  )
+                else
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.t.accent,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    ),
+                    onPressed: () async {
+                      setState(() => _isGenerating = true);
+                      await appState.updateFeed(); // 呼叫 Gemini AI
+                      setState(() => _isGenerating = false);
+                    },
+                    child: const Text('Ask AI to Generate Feed', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          );
+        }
+
+       
+        // 找到這個 PageView.builder
+        return PageView.builder(
+          scrollDirection: Axis.vertical,
+          itemCount: feedItems.length,
+          // 💡 新增這段：當滑到最後一部影片時，叫 AI 繼續生新的！
+          onPageChanged: (index) {
+            if (index == feedItems.length - 1) {
+              appState.updateFeed(); // 背景默默生成，無限滑動
+            }
+          },
+          itemBuilder: (context, index) {
+            // ... (保持原樣)
+            // ... (保持原樣)
+            return _VideoFeedItem(
+              item: feedItems[index],
+              t: widget.t,
+              navigate: widget.navigate,
+              appState: appState,
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _VideoFeedItem extends StatefulWidget {
+  final FeedItem item;
+  final AppTheme t;
+  final void Function(String screen, {Map<String, dynamic>? props}) navigate;
+  final AppState appState;
+
+  const _VideoFeedItem({
+    required this.item,
+    required this.t,
+    required this.navigate,
+    required this.appState,
+  });
+
+  @override
+  State<_VideoFeedItem> createState() => _VideoFeedItemState();
+}
+
+class _VideoFeedItemState extends State<_VideoFeedItem> {
+  YoutubePlayerController? _ytController;
+
+  @override
+  void initState() {
+    super.initState();
+    
+    // 將 AI 給的完整網址，轉換成 YouTube Player 看得懂的 ID
+    final videoId = YoutubePlayer.convertUrlToId(widget.item.videoUrl);
+    
+    if (videoId != null) {
+      _ytController = YoutubePlayerController(
+        initialVideoId: videoId,
+        flags: const YoutubePlayerFlags(
+          autoPlay: true,
+          loop: true,
+          mute: true, 
+          hideControls: false, 
+        ),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _ytController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
       children: [
-        // Video area
-        Expanded(
-          child: GestureDetector(
-            onHorizontalDragEnd: (d) {
-              if (d.primaryVelocity == null) return;
-              if (d.primaryVelocity! < -300 && _current < _songs.length - 1) {
-                setState(() => _current++);
-              } else if (d.primaryVelocity! > 300 && _current > 0) {
-                setState(() => _current--);
-              }
-            },
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 500),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [pal.from, pal.to],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Shimmer lines
-                  Positioned.fill(
-                    child: CustomPaint(painter: _ShimmerPainter()),
-                  ),
+        // 背景與影片播放器
+        Container(color: Colors.black),
+        if (_ytController != null)
+          Center(
+            child: YoutubePlayer(
+              controller: _ytController!,
+              aspectRatio: 16 / 9,
+              // 💡 加入這個參數，強制在 Web 上使用 iframe 模式，避開插件衝突
+              bottomActions:[], 
+              showVideoProgressIndicator: true,
+            ),
+          )
+        else
+          const Center(child: Text('Invalid Video URL', style: TextStyle(color: Colors.white))),
 
-                  // Glow blob
-                  Positioned(
-                    top: MediaQuery.of(context).size.height * 0.12,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        width: 200, height: 200,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: pal.accent.withValues(alpha: 0.18),
-                          boxShadow: [BoxShadow(color: pal.accent.withValues(alpha: 0.3), blurRadius: 60, spreadRadius: 20)],
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Album art faded
-                  Positioned(
-                    top: 0, bottom: 0, left: 0, right: 0,
-                    child: Center(
-                      child: Opacity(
-                        opacity: 0.22,
-                        child: AlbumArt(seed: song.seed, size: 180, radius: 32),
-                      ),
-                    ),
-                  ),
-
-                  // Play/pause
-                  Center(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _playing = !_playing),
-                      child: Container(
-                        width: 60, height: 60,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withValues(alpha: 0.18),
-                          border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 1.5),
-                        ),
-                        child: Icon(
-                          _playing ? Icons.pause : Icons.play_arrow,
-                          size: 24, color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Song info at bottom
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
-                        ),
-                      ),
-                      padding: const EdgeInsets.fromLTRB(20, 40, 24, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: Text(song.title,
-                                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Colors.white)),
-                              ),
-                              const SizedBox(width: 14),
-                              _AddToLibraryButton(
-                                inLibrary: _isInLibrary(song.title),
-                                onTap: () => _handleButtonTap(context, song),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Text('${song.artist} · ${song.genre}',
-                              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.7))),
-                          const SizedBox(height: 6),
-                          Text(song.desc,
-                              style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.55), height: 1.5)),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Peek hints
-                  if (_current < _songs.length - 1)
-                    Positioned(
-                      right: 0, top: 0, bottom: 0,
-                      child: Container(
-                        width: 14,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                        ),
-                      ),
-                    ),
-                  if (_current > 0)
-                    Positioned(
-                      left: 0, top: 0, bottom: 0,
-                      child: Container(
-                        width: 14,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.12),
-                          borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
-                        ),
-                      ),
-                    ),
-                ],
+        // 底部漸層遮罩 (為了讓文字清楚)
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: 300,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Colors.transparent, Colors.black.withValues(alpha: 0.85)],
               ),
             ),
           ),
         ),
 
-        // CTAs
-        Container(
-          color: t.bg,
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+        // 歌曲資訊與推薦理由 (左下角)
+        Positioned(
+          bottom: 20,
+          left: 20,
+          right: 80, // 留空間給右邊的按鈕
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text(
+                widget.item.title,
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.white),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.item.artist} · ${widget.item.genre}',
+                style: const TextStyle(fontSize: 16, color: Colors.white70),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                widget.item.description,
+                style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4),
+              ),
+              const SizedBox(height: 20),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () => widget.navigate('practicing', props: {
-                    'title': song.title,
-                    'artist': song.artist,
-                    'bpm': song.bpm,
-                  }),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: t.accent,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    backgroundColor: widget.t.accent,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 0,
                   ),
-                  child: const Text("Let's practice",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: Colors.white)),
+                  onPressed: () {
+                    // 💡 點擊練習，自動將歌加入 Library，並跳轉
+                    widget.appState.searchSongToLibrary(widget.item.title, widget.item.artist);
+                    widget.navigate('practicing', props: {'title': widget.item.title});
+                  },
+                  child: const Text("Let's practice", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
               ),
-              const SizedBox(height: 10),
+            ],
+          ),
+        ),
+
+        // 互動按鈕 (右下角)
+        Positioned(
+          right: 16,
+          bottom: 100,
+          child: Column(
+            children: [
+              // Like
               GestureDetector(
-                onTap: () => widget.navigate('library'),
-                child: Text('Go to my library',
-                    style: TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600, color: t.textSec,
-                      decoration: TextDecoration.underline,
-                      decorationColor: t.border,
-                    )),
+                onTap: () => widget.appState.setFeedItemAction(widget.item.id, widget.item.actionState, 'liked'),
+                child: Column(
+                  children: [
+                    Icon(
+                      widget.item.actionState == 'liked' ? Icons.thumb_up : Icons.thumb_up_outlined,
+                      size: 36,
+                      color: widget.item.actionState == 'liked' ? widget.t.accent : Colors.white,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Like', style: TextStyle(color: widget.item.actionState == 'liked' ? widget.t.accent : Colors.white, fontSize: 12)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              // Dislike
+              GestureDetector(
+                onTap: () => widget.appState.setFeedItemAction(widget.item.id, widget.item.actionState, 'disliked'),
+                child: Column(
+                  children: [
+                    Icon(
+                      widget.item.actionState == 'disliked' ? Icons.thumb_down : Icons.thumb_down_outlined,
+                      size: 36,
+                      color: widget.item.actionState == 'disliked' ? Colors.red : Colors.white,
+                    ),
+                    const SizedBox(height: 4),
+                    Text('Dislike', style: TextStyle(color: widget.item.actionState == 'disliked' ? Colors.red : Colors.white, fontSize: 12)),
+                  ],
+                ),
               ),
             ],
           ),
@@ -293,81 +269,4 @@ class _InspirationScreenState extends State<InspirationScreen> {
       ],
     );
   }
-}
-
-class _AddToLibraryButton extends StatelessWidget {
-  final bool inLibrary;
-  final VoidCallback onTap;
-
-  const _AddToLibraryButton({required this.inLibrary, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 32,
-        height: 32,
-        child: Center(
-          child: inLibrary
-              ? CustomPaint(
-                  size: const Size(24, 24),
-                  painter: const _CheckCirclePainter(),
-                )
-              : const Icon(Icons.add, color: Colors.white, size: 24),
-        ),
-      ),
-    );
-  }
-}
-
-class _CheckCirclePainter extends CustomPainter {
-  const _CheckCirclePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.saveLayer(Offset.zero & size, Paint());
-
-    canvas.drawCircle(
-      Offset(size.width / 2, size.height / 2),
-      size.width / 2,
-      Paint()..color = Colors.white,
-    );
-
-    final path = Path()
-      ..moveTo(size.width * 0.24, size.height * 0.50)
-      ..lineTo(size.width * 0.42, size.height * 0.68)
-      ..lineTo(size.width * 0.76, size.height * 0.32);
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..blendMode = BlendMode.clear
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = size.width * 0.13
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_CheckCirclePainter old) => false;
-}
-
-class _ShimmerPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.015)
-      ..strokeWidth = 1;
-    for (double y = 0; y < size.height; y += 4) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(_ShimmerPainter old) => false;
 }

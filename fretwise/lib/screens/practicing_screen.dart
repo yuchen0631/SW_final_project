@@ -228,157 +228,83 @@ class _PracticingScreenState extends State<PracticingScreen> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () { _running = false; widget.navigate('library'); },
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.arrow_back, size: 22, color: t.text),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: t.text)),
-                  ),
-                  Text(widget.artist, style: TextStyle(fontSize: 13, color: t.textSec)),
-                ],
-              ),
-            ),
-
-            // Timer
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: t.surface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: t.border),
-                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)],
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        // 💡 1. 這裡包上 SingleChildScrollView，讓畫面超出時可以滑動
+        SingleChildScrollView(
+          child: Container(
+            // 💡 2. 設定最小高度為螢幕高度，確保按鈕還是會被推到最下面
+            constraints: BoxConstraints(minHeight: MediaQuery.of(context).size.height),
+            child: Column(
+              children: [
+                // Header
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                    child: Row(
                       children: [
-                        Text('SESSION TIME',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.textMuted, letterSpacing: 0.7)),
-                        const SizedBox(height: 2),
-                        Text(
-                          _fmt(_seconds),
-                          style: TextStyle(
-                            fontSize: 44,
-                            fontWeight: FontWeight.w900,
-                            color: t.text,
-                            letterSpacing: -2,
-                            height: 1,
-                            fontFeatures: const [FontFeature.tabularFigures()],
+                        GestureDetector(
+                          onTap: () { _running = false; widget.navigate('library'); },
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(Icons.arrow_back, size: 22, color: t.text),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(widget.title, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: t.text)),
+                        ),
+                        Text(widget.artist, style: TextStyle(fontSize: 13, color: t.textSec)),
                       ],
                     ),
-                    GestureDetector(
-                      onTap: () => setState(() => _running = !_running),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 52, height: 52,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: _running ? t.accent : t.surfaceAlt,
-                        ),
-                        child: Icon(
-                          _running ? Icons.pause : Icons.play_arrow,
-                          size: 22,
-                          color: _running ? Colors.white : t.text,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
 
-            // Tools row
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: Row(
-                children: [
-                  Expanded(child: _ToolButton(id: 'tuner', label: 'Tuner', icon: Icons.graphic_eq, color: AppColors.blue, active: _activePopup == 'tuner', t: t, onTap: () => _handleToolTap('tuner'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: _ToolButton(id: 'record', label: _recording ? 'Stop' : 'Record', icon: Icons.mic, color: AppColors.red, active: _recording, t: t, onTap: () => _handleToolTap('record'))),
-                  const SizedBox(width: 10),
-                  Expanded(child: _ToolButton(id: 'metronome', label: 'Metronome', icon: Icons.tune, color: AppColors.green, active: _activePopup == 'metronome', t: t, onTap: () => _handleToolTap('metronome'))),
-                ],
-              ),
-            ),
-
-            // Video
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-              child: GestureDetector(
-                onTap: () => setState(() => _videoPlaying = !_videoPlaying),
-                child: AspectRatio(
-                  aspectRatio: 16 / 9,
+                // Timer
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                   child: Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1A1A1A),
-                      borderRadius: BorderRadius.circular(16),
+                      color: t.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: t.border),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)],
                     ),
-                    child: Stack(
+                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Positioned.fill(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(16),
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFF2A2420), Color(0xFF1A1510)],
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('SESSION TIME',
+                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.textMuted, letterSpacing: 0.7)),
+                            const SizedBox(height: 2),
+                            Text(
+                              _fmt(_seconds),
+                              style: TextStyle(
+                                fontSize: 44,
+                                fontWeight: FontWeight.w900,
+                                color: t.text,
+                                letterSpacing: -2,
+                                height: 1,
+                                fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
-                          ),
+                          ],
                         ),
-                        Center(
-                          child: Container(
+                        GestureDetector(
+                          onTap: () => setState(() => _running = !_running),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
                             width: 52, height: 52,
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              color: Colors.white.withValues(alpha: 0.18),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                              color: _running ? t.accent : t.surfaceAlt,
                             ),
                             child: Icon(
-                              _videoPlaying ? Icons.pause : Icons.play_arrow,
-                              size: 22, color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          bottom: 0, left: 0, right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
-                              ),
-                            ),
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('${widget.title} — Tutorial',
-                                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
-                                Text('${widget.artist} · Tap to ${_videoPlaying ? "pause" : "play"}',
-                                    style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.65))),
-                              ],
+                              _running ? Icons.pause : Icons.play_arrow,
+                              size: 22,
+                              color: _running ? Colors.white : t.text,
                             ),
                           ),
                         ),
@@ -386,68 +312,156 @@ class _PracticingScreenState extends State<PracticingScreen> {
                     ),
                   ),
                 ),
-              ),
-            ),
 
-            // Tool panel
-            if (_activePopup != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                child: _activePopup == 'tuner'
-                    ? _TunerPanel(
-                        t: t,
-                        note: _tunerNote,
-                        octave: _tunerOctave,
-                        freq: _tunerFreq,
-                        cents: _tunerCents,
-                        pitched: _tunerPitched,
-                        permDenied: _tunerPermDenied,
-                        onClose: () => _handleToolTap('tuner'),
-                      )
-                    : _MetronomePanel(
-                        t: t,
-                        bpm: _metroBpm,
-                        running: _metroRunning,
-                        beat: _metroBeat,
-                        onBpmChange: (v) {
-                          setState(() => _metroBpm = v);
-                          if (_metroRunning) { _stopMetronome(); _startMetronome(); }
-                        },
-                        onToggle: () => setState(() {
-                          _metroRunning = !_metroRunning;
-                          _metroRunning ? _startMetronome() : _stopMetronome();
-                        }),
-                        onClose: () => _handleToolTap('metronome'),
-                      ),
-              ),
-
-            const Spacer(),
-
-            // Finish button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () {
-                    _running = false;
-                    widget.navigate('sessionComplete', props: {
-                      'title': widget.title,
-                      'artist': widget.artist,
-                      'duration': _seconds,
-                    });
-                  },
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: t.border, width: 1.5),
-                    padding: const EdgeInsets.symmetric(vertical: 13),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                // Tools row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: Row(
+                    children: [
+                      Expanded(child: _ToolButton(id: 'tuner', label: 'Tuner', icon: Icons.graphic_eq, color: AppColors.blue, active: _activePopup == 'tuner', t: t, onTap: () => _handleToolTap('tuner'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: _ToolButton(id: 'record', label: _recording ? 'Stop' : 'Record', icon: Icons.mic, color: AppColors.red, active: _recording, t: t, onTap: () => _handleToolTap('record'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: _ToolButton(id: 'metronome', label: 'Metronome', icon: Icons.tune, color: AppColors.green, active: _activePopup == 'metronome', t: t, onTap: () => _handleToolTap('metronome'))),
+                    ],
                   ),
-                  child: Text('Finish Session',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text)),
                 ),
-              ),
+
+                // Video
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: GestureDetector(
+                    onTap: () => setState(() => _videoPlaying = !_videoPlaying),
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1A1A1A),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(16),
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFF2A2420), Color(0xFF1A1510)],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Center(
+                              child: Container(
+                                width: 52, height: 52,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.18),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                                ),
+                                child: Icon(
+                                  _videoPlaying ? Icons.pause : Icons.play_arrow,
+                                  size: 22, color: Colors.white,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 0, left: 0, right: 0,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.75)],
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(14),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('${widget.title} — Tutorial',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                                    Text('${widget.artist} · Tap to ${_videoPlaying ? "pause" : "play"}',
+                                        style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.65))),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Tool panel
+                if (_activePopup != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: _activePopup == 'tuner'
+                        ? _TunerPanel(
+                            t: t,
+                            note: _tunerNote,
+                            octave: _tunerOctave,
+                            freq: _tunerFreq,
+                            cents: _tunerCents,
+                            pitched: _tunerPitched,
+                            permDenied: _tunerPermDenied,
+                            onClose: () => _handleToolTap('tuner'),
+                          )
+                        : _MetronomePanel(
+                            t: t,
+                            bpm: _metroBpm,
+                            running: _metroRunning,
+                            beat: _metroBeat,
+                            onBpmChange: (v) {
+                              setState(() => _metroBpm = v);
+                              if (_metroRunning) { _stopMetronome(); _startMetronome(); }
+                            },
+                            onToggle: () => setState(() {
+                              _metroRunning = !_metroRunning;
+                              _metroRunning ? _startMetronome() : _stopMetronome();
+                            }),
+                            onClose: () => _handleToolTap('metronome'),
+                          ),
+                  ),
+
+                // 💡 3. 將 Spacer() 換成彈性空白，避免 ScrollView 當機
+                const SizedBox(height: 40),
+
+                // Finish button
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        _running = false;
+                        widget.navigate('sessionComplete', props: {
+                          'title': widget.title,
+                          'artist': widget.artist,
+                          'duration': _seconds,
+                        });
+                      },
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: t.border, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('Finish Session',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: t.text)),
+                    ),
+                  ),
+                ),
+                
+                // 給底部留一點安全距離
+                const SizedBox(height: 100),
+              ],
             ),
-          ],
+          ),
         ),
 
         // AI button

@@ -70,7 +70,7 @@ exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120
   
       let songs = [];
       try {
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
         // 💡 加上隨機時間種子，強迫 AI 每次都推薦不一樣的歌
         const randomSeed = Date.now();
         const prompt = `你是一個吉他老師。請「隨機」推薦 3 首適合吉他練習的流行曲（隨機種子：${randomSeed}，確保與之前不同）。只回傳 JSON 陣列，絕對不要包含任何其他文字。格式: [{"title":"歌曲名","artist":"歌手","description":"推薦原因"}]`;

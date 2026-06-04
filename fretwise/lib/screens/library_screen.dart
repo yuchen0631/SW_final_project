@@ -1,24 +1,19 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme.dart';
 import '../models/song.dart';
+import '../models/app_state.dart';
 import '../widgets/album_art.dart';
 import '../widgets/progress_bar.dart';
 
 class LibraryScreen extends StatefulWidget {
   final AppTheme t;
   final void Function(String screen, {Map<String, dynamic>? props}) navigate;
-  final List<Song> extraSongs;
-  final Set<String> removedLibrarySongs;
-  final void Function(Song) onAddSong;
 
   const LibraryScreen({
     super.key,
     required this.t,
     required this.navigate,
-    required this.extraSongs,
-    required this.removedLibrarySongs,
-    required this.onAddSong,
   });
 
   @override
@@ -26,7 +21,6 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
-  Set<int> _favorites = {0, 2};
   bool _filterFavs = false;
   bool _filterArchived = false;
   String _sortBy = 'date';
@@ -34,7 +28,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
   bool _showSort = false;
   bool _showAddModal = false;
   String? _addError;
-  final Set<String> _archived = {};
   final _titleCtrl = TextEditingController();
   final _artistCtrl = TextEditingController();
   String _searchQuery = '';
@@ -43,45 +36,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   AppTheme get t => widget.t;
 
-  List<Song> get _allSongs {
-    final base = Song.library.where((s) => !widget.removedLibrarySongs.contains(s.title));
-    final all = [...base, ...widget.extraSongs];
-    return all.where((s) => !_archived.contains(s.title)).toList();
-  }
-
-  List<Song> get _visibleSongs {
-    final effectiveBase = Song.library.where((s) => !widget.removedLibrarySongs.contains(s.title));
-    List<Song> all;
-    if (_filterArchived) {
-      all = [...effectiveBase, ...widget.extraSongs].where((s) => _archived.contains(s.title)).toList();
-    } else {
-      all = [...effectiveBase, ...widget.extraSongs].where((s) => !_archived.contains(s.title)).toList();
-    }
-
-    if (_searchQuery.isNotEmpty) {
-      final q = _searchQuery.toLowerCase();
-      all = all.where((s) => s.title.toLowerCase().contains(q) || s.artist.toLowerCase().contains(q)).toList();
-    }
-
-    if (_filterFavs && !_filterArchived) {
-      all = all.where((s) {
-        final idx = Song.library.indexOf(s);
-        return idx >= 0 && _favorites.contains(idx);
-      }).toList();
-    }
-
-    all.sort((a, b) {
-      int cmp;
-      switch (_sortBy) {
-        case 'date': cmp = a.lastPracticed.compareTo(b.lastPracticed); break;
-        case 'progress': cmp = a.progress.compareTo(b.progress); break;
-        case 'title': cmp = a.title.compareTo(b.title); break;
-        case 'artist': cmp = a.artist.compareTo(b.artist); break;
-        default: cmp = 0;
-      }
-      return _sortAsc ? cmp : -cmp;
-    });
-    return all;
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _artistCtrl.dispose();
+    super.dispose();
   }
 
   void _scrollToSong(String title) {
@@ -104,48 +63,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
     });
   }
 
-  void _addSong() {
+  void _addSongAI(AppState appState) async {
     final title = _titleCtrl.text.trim();
+    final artist = _artistCtrl.text.trim();
     if (title.isEmpty) return;
-    final effectiveBase = Song.library.where((s) => !widget.removedLibrarySongs.contains(s.title));
-    final all = [...effectiveBase, ...widget.extraSongs];
-    final duplicate = all.where((s) => s.title.toLowerCase() == title.toLowerCase()).firstOrNull;
-    if (duplicate != null) {
-      setState(() {
-        _titleCtrl.clear();
-        _artistCtrl.clear();
-        _addError = null;
-        _showAddModal = false;
-      });
-      _scrollToSong(duplicate.title);
-      return;
-    }
-    final rng = Random();
-    final mins = 2 + rng.nextInt(5);
-    final secs = rng.nextInt(60);
-    final duration = '$mins:${secs.toString().padLeft(2, '0')}';
-    final progress = 5 + rng.nextInt(91);
-    widget.onAddSong(Song(
-      title: title,
-      artist: _artistCtrl.text.trim().isEmpty ? 'Unknown Artist' : _artistCtrl.text.trim(),
-      seed: Song.library.length + widget.extraSongs.length,
-      duration: duration,
-      progress: progress,
-    ));
+
+    setState(() {
+      _showAddModal = false;
+      _addError = null;
+    });
+
+    // 呼叫 AppState 的 AI 搜尋功能
+    await appState.searchSongToLibrary(title, artist);
+
     setState(() {
       _titleCtrl.clear();
       _artistCtrl.clear();
-      _addError = null;
-      _showAddModal = false;
     });
+    
     _scrollToSong(title);
   }
 
-  @override
-  void dispose() {
-    _titleCtrl.dispose();
-    _artistCtrl.dispose();
-    super.dispose();
+  List<SongEntry> _getVisibleSongs(List<SongEntry> allSongs) {
+    List<SongEntry> all;
+    
+    // 1. 過濾 Archived
+    all = allSongs.where((s) => s.isArchived == _filterArchived).toList();
+
+    // 2. 過濾搜尋字串
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      all = all.where((s) => s.title.toLowerCase().contains(q) || s.artist.toLowerCase().contains(q)).toList();
+    }
+
+    // 3. 過濾 Favorites
+    if (_filterFavs && !_filterArchived) {
+      all = all.where((s) => s.isFavorite).toList();
+    }
+
+    // 4. 排序
+    all.sort((a, b) {
+      int cmp;
+      switch (_sortBy) {
+        case 'date': 
+          final aDate = a.lastPracticedAt?.toDate().millisecondsSinceEpoch ?? 0;
+          final bDate = b.lastPracticedAt?.toDate().millisecondsSinceEpoch ?? 0;
+          cmp = aDate.compareTo(bDate); 
+          break;
+        case 'progress': cmp = a.progressPercent.compareTo(b.progressPercent); break;
+        case 'title': cmp = a.title.compareTo(b.title); break;
+        case 'artist': cmp = a.artist.compareTo(b.artist); break;
+        default: cmp = 0;
+      }
+      return _sortAsc ? cmp : -cmp;
+    });
+    return all;
   }
 
   String _sortDirectionLabel(String key) {
@@ -160,236 +132,253 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final songs = _visibleSongs;
+    final appState = context.watch<AppState>();
 
     return Stack(
       children: [
         Column(
           children: [
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.only(bottom: 80),
-                children: [
-                  // Header
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Library',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w700,
-                              color: t.text,
-                              fontFamily: 'Georgia',
-                            )),
-                        const SizedBox(height: 4),
-                        Text('${_allSongs.length} songs',
-                            style: TextStyle(fontSize: 14, color: t.textSec)),
-                      ],
-                    ),
-                  ),
+              child: StreamBuilder<List<SongEntry>>(
+                stream: appState.libraryStream,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  final allSongs = snapshot.data ?? [];
+                  final songs = _getVisibleSongs(allSongs);
 
-                  // Search
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: t.surface,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: t.border),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-                      child: Row(
-                        children: [
-                          Icon(Icons.search, size: 16, color: t.textMuted),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              onChanged: (v) => setState(() => _searchQuery = v),
-                              style: TextStyle(fontSize: 14, color: t.text),
-                              decoration: InputDecoration(
-                                hintText: 'Search songs, artists…',
-                                hintStyle: TextStyle(color: t.textMuted),
-                                border: InputBorder.none,
-                                isDense: true,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Filters
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-                    child: Row(
-                      children: [
-                        _FilterChip(
-                          label: 'Favorites',
-                          icon: Icons.favorite,
-                          active: _filterFavs,
-                          t: t,
-                          onTap: () => setState(() { _filterFavs = !_filterFavs; _filterArchived = false; }),
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChip(
-                          label: 'Archived',
-                          icon: Icons.archive_outlined,
-                          active: _filterArchived,
-                          t: t,
-                          activeColor: t.textMuted,
-                          onTap: () => setState(() { _filterArchived = !_filterArchived; _filterFavs = false; }),
-                        ),
-                        if (!_filterArchived) ...[
-                          const SizedBox(width: 8),
-                          _FilterChip(
-                            label: 'Sort',
-                            icon: Icons.sort,
-                            active: _showSort,
-                            t: t,
-                            onTap: () => setState(() => _showSort = !_showSort),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  // Sort menu
-                  if (_showSort)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: t.surface,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: t.border),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 30)],
-                        ),
+                  return ListView(
+                    padding: const EdgeInsets.only(bottom: 80),
+                    children: [
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            for (final opt in [
-                              ('date', 'Date Practiced'),
-                              ('progress', 'Progress'),
-                              ('title', 'Title'),
-                              ('artist', 'Artist'),
-                            ])
-                              GestureDetector(
-                                onTap: () => setState(() {
-                                  if (_sortBy == opt.$1) {
-                                    _sortAsc = !_sortAsc;
-                                  } else {
-                                    _sortBy = opt.$1;
-                                    _sortAsc = opt.$1 == 'title' || opt.$1 == 'artist';
-                                  }
-                                }),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-                                  decoration: BoxDecoration(
-                                    color: _sortBy == opt.$1 ? t.accentSoft : Colors.transparent,
-                                    border: Border(bottom: BorderSide(color: t.borderLight)),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(opt.$2,
-                                                style: TextStyle(
-                                                  fontSize: 14,
-                                                  color: _sortBy == opt.$1 ? t.accent : t.text,
-                                                  fontWeight: _sortBy == opt.$1 ? FontWeight.w700 : FontWeight.w400,
-                                                )),
-                                            if (_sortBy == opt.$1)
-                                              Text(
-                                                _sortDirectionLabel(opt.$1),
-                                                style: TextStyle(fontSize: 11, color: t.accent),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      if (_sortBy == opt.$1)
-                                        Icon(
-                                          _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
-                                          size: 16,
-                                          color: t.accent,
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                            Text('Library',
+                                style: TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  color: t.text,
+                                  fontFamily: 'Georgia',
+                                )),
+                            const SizedBox(height: 4),
+                            Text('${allSongs.length} songs',
+                                style: TextStyle(fontSize: 14, color: t.textSec)),
                           ],
                         ),
                       ),
-                    ),
 
-                  // Song list
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      children: [
-                        if (songs.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 40),
-                            child: Center(
-                              child: Text(
-                                _filterArchived ? 'No archived songs.' : 'No songs yet — add one!',
-                                style: TextStyle(fontSize: 14, color: t.textMuted),
+                      // Search
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: t.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: t.border),
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                          child: Row(
+                            children: [
+                              Icon(Icons.search, size: 16, color: t.textMuted),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  onChanged: (v) => setState(() => _searchQuery = v),
+                                  style: TextStyle(fontSize: 14, color: t.text),
+                                  decoration: InputDecoration(
+                                    hintText: 'Search songs, artists…',
+                                    hintStyle: TextStyle(color: t.textMuted),
+                                    border: InputBorder.none,
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                        for (final s in songs) ...[
-                          _SongCard(
-                            key: _cardKeys.putIfAbsent(s.title, () => GlobalKey()),
-                            song: s,
-                            t: t,
-                            isFav: Song.library.contains(s) && _favorites.contains(Song.library.indexOf(s)),
-                            isArchived: _filterArchived,
-                            isHighlighted: _highlightedSong == s.title,
-                            onTap: () => widget.navigate('practicing', props: {
-                              'title': s.title,
-                              'artist': s.artist,
-                              'bpm': s.bpm,
-                            }),
-                            onFavToggle: Song.library.contains(s)
-                                ? () {
-                                    final idx = Song.library.indexOf(s);
-                                    setState(() {
-                                      if (_favorites.contains(idx)) {
-                                        _favorites = Set.from(_favorites)..remove(idx);
-                                      } else {
-                                        _favorites = {..._favorites, idx};
-                                      }
-                                    });
-                                  }
-                                : null,
-                            onArchive: !_filterArchived
-                                ? () => setState(() => _archived.add(s.title))
-                                : null,
-                            onUnarchive: _filterArchived
-                                ? () => setState(() => _archived.remove(s.title))
-                                : null,
-                          ),
-                          const SizedBox(height: 10),
-                        ],
-                      ],
-                    ),
-                  ),
-
-                  if (!_filterArchived)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Center(
-                        child: Text(
-                          '← swipe left to archive',
-                          style: TextStyle(fontSize: 11, color: t.textMuted),
                         ),
                       ),
-                    ),
-                ],
+
+                      // Filters
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                        child: Row(
+                          children: [
+                            _FilterChip(
+                              label: 'Favorites',
+                              icon: Icons.favorite,
+                              active: _filterFavs,
+                              t: t,
+                              onTap: () => setState(() { _filterFavs = !_filterFavs; _filterArchived = false; }),
+                            ),
+                            const SizedBox(width: 8),
+                            _FilterChip(
+                              label: 'Archived',
+                              icon: Icons.archive_outlined,
+                              active: _filterArchived,
+                              t: t,
+                              activeColor: t.textMuted,
+                              onTap: () => setState(() { _filterArchived = !_filterArchived; _filterFavs = false; }),
+                            ),
+                            if (!_filterArchived) ...[
+                              const SizedBox(width: 8),
+                              _FilterChip(
+                                label: 'Sort',
+                                icon: Icons.sort,
+                                active: _showSort,
+                                t: t,
+                                onTap: () => setState(() => _showSort = !_showSort),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      // Sort menu
+                      if (_showSort)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: t.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: t.border),
+                              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 30)],
+                            ),
+                            child: Column(
+                              children: [
+                                for (final opt in [
+                                  ('date', 'Date Practiced'),
+                                  ('progress', 'Progress'),
+                                  ('title', 'Title'),
+                                  ('artist', 'Artist'),
+                                ])
+                                  GestureDetector(
+                                    onTap: () => setState(() {
+                                      if (_sortBy == opt.$1) {
+                                        _sortAsc = !_sortAsc;
+                                      } else {
+                                        _sortBy = opt.$1;
+                                        _sortAsc = opt.$1 == 'title' || opt.$1 == 'artist';
+                                      }
+                                    }),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                                      decoration: BoxDecoration(
+                                        color: _sortBy == opt.$1 ? t.accentSoft : Colors.transparent,
+                                        border: Border(bottom: BorderSide(color: t.borderLight)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(opt.$2,
+                                                    style: TextStyle(
+                                                      fontSize: 14,
+                                                      color: _sortBy == opt.$1 ? t.accent : t.text,
+                                                      fontWeight: _sortBy == opt.$1 ? FontWeight.w700 : FontWeight.w400,
+                                                    )),
+                                                if (_sortBy == opt.$1)
+                                                  Text(
+                                                    _sortDirectionLabel(opt.$1),
+                                                    style: TextStyle(fontSize: 11, color: t.accent),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (_sortBy == opt.$1)
+                                            Icon(
+                                              _sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                                              size: 16,
+                                              color: t.accent,
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Loading state from AI
+                      if (appState.isLoadingAddSong)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  backgroundColor: t.border,
+                                  color: t.accent,
+                                  minHeight: 6, // 依照文件要求，更有「體感前進」的感覺
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text('AI is searching for the song tutorial...', 
+                                  style: TextStyle(color: t.accent, fontSize: 12, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+
+                      // Song list
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          children: [
+                            if (songs.isEmpty && !appState.isLoadingAddSong)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 40),
+                                child: Center(
+                                  child: Text(
+                                    _filterArchived ? 'No archived songs.' : 'No songs yet — add one!',
+                                    style: TextStyle(fontSize: 14, color: t.textMuted),
+                                  ),
+                                ),
+                              ),
+                            for (final s in songs) ...[
+                              _SongCard(
+                                key: ValueKey(s.id),
+                                song: s,
+                                t: t,
+                                isHighlighted: _highlightedSong == s.title,
+                                onTap: () => widget.navigate('practicing', props: {
+                                  'title': s.title,
+                                  'artist': s.artist,
+                                  'bpm': s.bpm,
+                                }),
+                                onFavToggle: () => appState.updateSongStatus(s.id, {'isFavorite': !s.isFavorite}),
+                                onArchive: !_filterArchived ? () => appState.updateSongStatus(s.id, {'isArchived': true}) : null,
+                                onUnarchive: _filterArchived ? () => appState.updateSongStatus(s.id, {'isArchived': false}) : null,
+                              ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      if (!_filterArchived && songs.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Center(
+                            child: Text(
+                              '← swipe left to archive',
+                              style: TextStyle(fontSize: 11, color: t.textMuted),
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                }
               ),
             ),
           ],
@@ -468,13 +457,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         hint: 'e.g. Led Zeppelin',
                         controller: _artistCtrl,
                         t: t,
-                        onSubmit: _addSong,
+                        onSubmit: () => _addSongAI(appState),
                       ),
                       const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         child: ElevatedButton(
-                          onPressed: _addSong,
+                          onPressed: () => _addSongAI(appState),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: t.accent,
                             padding: const EdgeInsets.symmetric(vertical: 15),
@@ -543,10 +532,8 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _SongCard extends StatefulWidget {
-  final Song song;
+  final SongEntry song;
   final AppTheme t;
-  final bool isFav;
-  final bool isArchived;
   final bool isHighlighted;
   final VoidCallback onTap;
   final VoidCallback? onFavToggle;
@@ -557,8 +544,6 @@ class _SongCard extends StatefulWidget {
     super.key,
     required this.song,
     required this.t,
-    required this.isFav,
-    required this.isArchived,
     required this.onTap,
     this.isHighlighted = false,
     this.onFavToggle,
@@ -611,7 +596,7 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: widget.song.progress > 0 ? 120 : 80,
+      height: widget.song.progressPercent > 0 ? 120 : 80,
       child: Stack(
         children: [
           // Archive action behind
@@ -714,7 +699,7 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                             ],
                           ),
                         ),
-                        if (widget.isArchived && widget.onUnarchive != null)
+                        if (widget.song.isArchived && widget.onUnarchive != null)
                           GestureDetector(
                             onTap: widget.onUnarchive,
                             child: Container(
@@ -733,29 +718,29 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                             child: Padding(
                               padding: const EdgeInsets.all(6),
                               child: Icon(
-                                widget.isFav ? Icons.favorite : Icons.favorite_border,
+                                widget.song.isFavorite ? Icons.favorite : Icons.favorite_border,
                                 size: 18,
-                                color: widget.isFav ? AppColors.red : t.textMuted,
+                                color: widget.song.isFavorite ? AppColors.red : t.textMuted,
                               ),
                             ),
                           ),
                       ],
                     ),
-                    if (widget.song.progress > 0) ...[
+                    if (widget.song.progressPercent > 0) ...[
                       const SizedBox(height: 12),
-                      ProgressBar(progress: widget.song.progress / 100, t: t, height: 4),
+                      ProgressBar(progress: widget.song.progressPercent / 100, t: t, height: 4),
                       const SizedBox(height: 5),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            widget.song.progress == 100 ? 'Completed' : 'In progress',
+                            widget.song.progressPercent == 100 ? 'Completed' : 'In progress',
                             style: TextStyle(
                               fontSize: 11,
-                              color: widget.song.progress == 100 ? AppColors.green : t.textMuted,
+                              color: widget.song.progressPercent == 100 ? AppColors.green : t.textMuted,
                             ),
                           ),
-                          Text('${widget.song.progress}%',
+                          Text('${widget.song.progressPercent}%',
                               style: TextStyle(fontSize: 11, color: t.textMuted)),
                         ],
                       ),
