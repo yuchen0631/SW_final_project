@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "261776401862",
+    "project_id": "fretwise-6ceb6",
+    "storage_bucket": "fretwise-6ceb6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:261776401862:android:d6cea373eac96a4619bec7",
+        "android_client_info": {
+          "package_name": "com.fretwise.fretwise"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDVkVMo0wbXoBfLfZVeQZrwZmmMQadR7S0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

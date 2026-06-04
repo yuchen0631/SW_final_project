@@ -15,11 +15,13 @@ dependencies:
   audioplayers: ^6.1.0
   pitch_detector_dart: ^0.0.7
   mic_stream: ^0.7.2
-
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
-  flutter_lints: ^6.0.0
+  
+  # --- 新增的 Firebase 與 影片套件 ---
+  firebase_core: ^2.32.0
+  cloud_firestore: ^4.17.5
+  firebase_auth: ^4.19.6
+  cloud_functions: ^4.7.5
+  youtube_player_flutter: ^8.1.2
 
 flutter:
   uses-material-design: true
