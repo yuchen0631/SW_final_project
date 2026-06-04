@@ -4,10 +4,6 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 admin.initializeApp();
 
-// 🔑 貼上你的 Gemini API Key
-const GEMINI_API_KEY = "AQ.Ab8RN6KPg6twQE4AqPVuIzAWo0eBJeOaw-b4frp8BY_pdkiYhw"; 
-const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-
 // 🛠️ 真實 YouTube 爬蟲
 async function getRealYouTubeVideo(songTitle, artist) {
   try {
@@ -63,7 +59,8 @@ exports.searchSong = onCall({ cors: true, invoker: "public" }, async (request) =
 });
 
 // --- 巧君負責的功能 2: 更新 Feed (無限延伸 + 隨機版) ---
-exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120 }, async (request) => {
+exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120, secrets: ["GEMINI_API_KEY"] }, async (request) => {
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const uid = request.auth ? request.auth.uid : "test_user_123";
     const db = admin.firestore();
     const feedCol = db.collection('users').doc(uid).collection('feed');
@@ -73,7 +70,7 @@ exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120
   
       let songs = [];
       try {
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
         // 💡 加上隨機時間種子，強迫 AI 每次都推薦不一樣的歌
         const randomSeed = Date.now();
         const prompt = `你是一個吉他老師。請「隨機」推薦 3 首適合吉他練習的流行曲（隨機種子：${randomSeed}，確保與之前不同）。只回傳 JSON 陣列，絕對不要包含任何其他文字。格式: [{"title":"歌曲名","artist":"歌手","description":"推薦原因"}]`;
