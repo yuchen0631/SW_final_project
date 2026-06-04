@@ -172,4 +172,71 @@ class AppState extends ChangeNotifier {
       debugPrint('更新歌曲狀態失敗: $e');
     }
   }
+
+  void setCoins(int value) {
+    _coins = value;
+    notifyListeners();
+  }
+
+  bool ownsItem(String id) => _ownedItems.contains(id);
+}
+
+class AiMaterialService extends ChangeNotifier {
+  Map<String, dynamic>? _currentMaterial;
+  bool _isGenerating = false;
+
+  // 供 UI 讀取目前的教材與生成狀態
+  Map<String, dynamic>? get currentMaterial => _currentMaterial;
+  bool get isGenerating => _isGenerating;
+
+  /// 呼叫 AI API 生成教材（支援在背景執行）
+  Future<void> generateMaterial({
+    required String song,
+    required String artist,
+    String? preference,
+  }) async {
+    // 如果正在生成中，就不要重複觸發
+    if (_isGenerating) return;
+
+    _isGenerating = true;
+    notifyListeners(); // 通知 UI 顯示「AI 正在尋找資源...」之類的載入狀態
+
+    debugPrint('➔ [AI Service] 開始背景工作，搜尋 $song ($artist) 的資源...');
+
+    try {
+      // 模擬呼叫 API，利用 Google Search & YouTube 找資源（延遲 4 秒）
+      await Future.delayed(const Duration(seconds: 4));
+
+      // 模擬 API 回傳的資料結構（隨機模擬影片或圖片）
+      final isVideo = DateTime.now().second % 2 == 0;
+
+      if (isVideo) {
+        _currentMaterial = {
+          'type': 'video',
+          'title': '$song — Advanced Tutorial',
+          'url': 'https://www.youtube.com/watch?v=mock_video_id',
+        };
+      } else {
+        _currentMaterial = {
+          'type': 'image',
+          'title': '$song — Guitar Tabs',
+          'url': 'https://example.com/mock_tabs.png',
+        };
+      }
+      
+      debugPrint('➔ [AI Service] 背景生成成功！新型態為: ${_currentMaterial?['type']}');
+    } catch (e) {
+      debugPrint('➔ [AI Service] 生成出錯: $e');
+    } finally {
+      _isGenerating = false;
+      notifyListeners();
+    }
+  }
+
+  /// 重置教材（例如換別首歌時）
+  void reset() {
+    _currentMaterial = null;
+    _isGenerating = false;
+    notifyListeners();
+  }
 }

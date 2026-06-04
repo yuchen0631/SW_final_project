@@ -10,7 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
   provider: ^6.1.2
   audioplayers: ^6.1.0
   pitch_detector_dart: ^0.0.7
@@ -19,9 +19,10 @@ dependencies:
   firebase_auth: ^6.5.1
   cloud_firestore: ^6.4.1
   cloud_functions: ^6.3.1
-  youtube_player_flutter: ^8.1.2
   device_calendar: ^3.9.0
   timezone: ^0.11.0
+  youtube_player_flutter: ^10.0.1
+  youtube_player_iframe: ^6.0.2
 
 dev_dependencies:
   flutter_test:

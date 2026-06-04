@@ -124,17 +124,16 @@ class _VideoFeedItemState extends State<_VideoFeedItem> {
   void initState() {
     super.initState();
     
-    // 將 AI 給的完整網址，轉換成 YouTube Player 看得懂的 ID
-    final videoId = YoutubePlayer.convertUrlToId(widget.item.videoUrl);
-    
+    final videoId = YoutubePlayerController.convertUrlToId(widget.item.videoUrl);
+
     if (videoId != null) {
-      _ytController = YoutubePlayerController(
-        initialVideoId: videoId,
-        flags: const YoutubePlayerFlags(
-          autoPlay: true,
+      _ytController = YoutubePlayerController.fromVideoId(
+        videoId: videoId,
+        autoPlay: true,
+        params: const YoutubePlayerParams(
+          mute: true,
+          showControls: true,
           loop: true,
-          mute: true, 
-          hideControls: false, 
         ),
       );
     }
@@ -142,7 +141,7 @@ class _VideoFeedItemState extends State<_VideoFeedItem> {
 
   @override
   void dispose() {
-    _ytController?.dispose();
+    _ytController?.close();
     super.dispose();
   }
 
@@ -157,10 +156,6 @@ class _VideoFeedItemState extends State<_VideoFeedItem> {
           Center(
             child: YoutubePlayer(
               controller: _ytController!,
-              aspectRatio: 16 / 9,
-              // 💡 加入這個參數，強制在 Web 上使用 iframe 模式，避開插件衝突
-              bottomActions:[], 
-              showVideoProgressIndicator: true,
             ),
           )
         else

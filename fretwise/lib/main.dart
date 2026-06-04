@@ -30,8 +30,11 @@ void main() async {
 
   // 3. 執行 App
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => AppState(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AppState()),
+        ChangeNotifierProvider(create: (_) => AiMaterialService()),
+      ],
       child: const FretwiseApp(),
     ),
   );
@@ -240,6 +243,8 @@ class _FretwiseShellState extends State<FretwiseShell> {
         );
 
       case 'practicing':
+        final aiService = context.watch<AiMaterialService>();
+
         return PracticingScreen(
           t: t,
           navigate: _navigate,
@@ -247,6 +252,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
           artist: props['artist'] as String? ?? 'Oasis',
           bpm: props['bpm'] as int? ?? 87,
           onOpenAI: _openAI,
+          practiceMaterial: aiService.currentMaterial,
         );
 
       case 'sessionComplete':
