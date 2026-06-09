@@ -59,7 +59,7 @@ exports.searchSong = onCall({ cors: true, invoker: "public" }, async (request) =
 });
 
 // --- AI Chat Coach ---
-exports.chatWithCoach = onCall({ cors: true, invoker: "public" }, async (request) => {
+exports.chatWithCoach = onCall({ cors: true, invoker: "public", secrets: ["GEMINI_API_KEY"] }, async (request) => {
   const message = (request.data.message || '').trim();
   const history = request.data.history || [];
   const uid = request.auth ? request.auth.uid : "test_user_123";
@@ -117,7 +117,7 @@ exports.chatWithCoach = onCall({ cors: true, invoker: "public" }, async (request
 });
 
 // --- 巧君負責的功能 2: 更新 Feed (無限延伸 + 隨機版) ---
-exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120 }, async (request) => {
+exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120, secrets: ["GEMINI_API_KEY"] }, async (request) => {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const uid = request.auth ? request.auth.uid : "test_user_123";
     const db = admin.firestore();
