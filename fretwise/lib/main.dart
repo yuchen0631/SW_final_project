@@ -91,8 +91,16 @@ class _FretwiseShellState extends State<FretwiseShell> {
   Offset _fabPos = const Offset(20, 84);
   List<ChatMessage> _aiMessages = List.of(AIChatScreen.initialMessages);
   final List<ChatSession> _aiHistory = [];
+  final Map<String, List<ChatMessage>> _practicingChats = {};
+  String? _activePracticingChatKey;
 
   void _navigate(String dest, {Map<String, dynamic>? props}) {
+    final isScreenTransition = dest != _screen;
+    if (isScreenTransition) {
+      _saveActivePracticingChat();
+      _archiveActiveChat();
+    }
+
     if (dest == 'sessionComplete' && props != null) {
       context.read<AppState>().addDiaryEntry(
         DiaryEntry(
@@ -107,28 +115,60 @@ class _FretwiseShellState extends State<FretwiseShell> {
       _screenProps = props;
       _screen = dest;
       _showAI = false;
+      _activePracticingChatKey = null;
+      if (isScreenTransition && dest != 'practicing') {
+        _aiMessages = List.of(AIChatScreen.initialMessages);
+      }
     });
   }
 
   void _openAI() {
     final props = _screenProps ?? {};
     final hasSong = _screen == 'practicing' || _screen == 'sessionComplete';
+    final practicingChatKey = _screen == 'practicing'
+        ? _practicingChatKey(props)
+        : null;
     setState(() {
       _prevScreen = _screen;
       _aiSongTitle = hasSong ? props['title'] as String? : null;
       _aiSongArtist = hasSong ? props['artist'] as String? : null;
+      _activePracticingChatKey = practicingChatKey;
+      if (practicingChatKey != null) {
+        _aiMessages = List.of(
+          _practicingChats[practicingChatKey] ?? AIChatScreen.initialMessages,
+        );
+      }
       _showAI = true;
     });
   }
 
-  void _closeAI() => setState(() {
-    _showAI = false;
-    _aiSongTitle = null;
-    _aiSongArtist = null;
-  });
+  void _closeAI() {
+    _saveActivePracticingChat();
+    setState(() {
+      _showAI = false;
+      _aiSongTitle = null;
+      _aiSongArtist = null;
+    });
+  }
 
   bool get _hasActiveChat =>
       _aiMessages.length > AIChatScreen.initialMessages.length;
+
+  String _practicingChatKey(Map<String, dynamic> props) {
+    final songId = (props['songId'] as String?)?.trim();
+    if (songId != null && songId.isNotEmpty) return 'song:$songId';
+
+    final title = (props['title'] as String?)?.trim() ?? 'untitled';
+    final artist = (props['artist'] as String?)?.trim() ?? 'unknown';
+    return 'practice:$title|$artist';
+  }
+
+  void _saveActivePracticingChat() {
+    final key = _activePracticingChatKey;
+    if (_prevScreen != 'practicing' || key == null) return;
+
+    _practicingChats[key] = List.of(_aiMessages);
+  }
 
   String _chatTitle(List<ChatMessage> messages) {
     String? firstUserMessage;
@@ -171,6 +211,10 @@ class _FretwiseShellState extends State<FretwiseShell> {
     setState(() {
       _archiveActiveChat();
       _aiMessages = List.of(AIChatScreen.initialMessages);
+      final key = _activePracticingChatKey;
+      if (_prevScreen == 'practicing' && key != null) {
+        _practicingChats[key] = List.of(_aiMessages);
+      }
     });
   }
 
@@ -179,6 +223,10 @@ class _FretwiseShellState extends State<FretwiseShell> {
       _archiveActiveChat();
       _aiHistory.remove(session);
       _aiMessages = List.of(session.messages);
+      final key = _activePracticingChatKey;
+      if (_prevScreen == 'practicing' && key != null) {
+        _practicingChats[key] = List.of(_aiMessages);
+      }
     });
   }
 
