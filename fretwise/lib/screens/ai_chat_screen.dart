@@ -9,11 +9,13 @@ class ChatSession {
   final String title;
   final List<ChatMessage> messages;
   final DateTime updatedAt;
+  final String? practicingChatKey;
 
   const ChatSession({
     required this.title,
     required this.messages,
     required this.updatedAt,
+    this.practicingChatKey,
   });
 }
 

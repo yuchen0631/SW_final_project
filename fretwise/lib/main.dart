@@ -188,8 +188,12 @@ class _FretwiseShellState extends State<FretwiseShell> {
 
   void _archiveActiveChat() {
     if (!_hasActiveChat) return;
+    final practicingChatKey = _prevScreen == 'practicing'
+        ? _activePracticingChatKey
+        : null;
 
     _aiHistory.removeWhere((session) {
+      if (session.practicingChatKey != practicingChatKey) return false;
       if (session.messages.length != _aiMessages.length) return false;
       for (var i = 0; i < session.messages.length; i++) {
         if (session.messages[i] != _aiMessages[i]) return false;
@@ -203,8 +207,17 @@ class _FretwiseShellState extends State<FretwiseShell> {
         title: _chatTitle(_aiMessages),
         messages: List.of(_aiMessages),
         updatedAt: DateTime.now(),
+        practicingChatKey: practicingChatKey,
       ),
     );
+  }
+
+  List<ChatSession> get _visibleAIHistory {
+    final key = _activePracticingChatKey;
+    return _aiHistory.where((session) {
+      if (session.practicingChatKey == null) return true;
+      return key != null && session.practicingChatKey == key;
+    }).toList();
   }
 
   void _startNewAIChat() {
@@ -263,7 +276,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
                           fromScreen: _prevScreen,
                           onClose: _closeAI,
                           messages: _aiMessages,
-                          history: List.unmodifiable(_aiHistory),
+                          history: List.unmodifiable(_visibleAIHistory),
                           onNewChat: _startNewAIChat,
                           onOpenHistory: _openAIHistory,
                           activeSongTitle: _aiSongTitle,
