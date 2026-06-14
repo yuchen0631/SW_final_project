@@ -1,13 +1,20 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:mic_stream/mic_stream.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
+import 'package:record/record.dart';
 import '../theme.dart';
 import 'package:provider/provider.dart';
 import '../models/app_state.dart';
+import '../utils/song_id.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class PracticingScreen extends StatefulWidget {
@@ -17,6 +24,7 @@ class PracticingScreen extends StatefulWidget {
   final String artist;
   final int bpm;
   final VoidCallback onOpenAI;
+  final String? videoUrl;
 
   final Map<String, dynamic>? practiceMaterial;
 
@@ -28,6 +36,7 @@ class PracticingScreen extends StatefulWidget {
     required this.artist,
     required this.bpm,
     required this.onOpenAI,
+    this.videoUrl,
     this.practiceMaterial,
   });
 
@@ -45,6 +54,10 @@ class _PracticingScreenState extends State<PracticingScreen> {
 
   YoutubePlayerController? _ytController;
   String? _lastVideoId; // 用來記錄上一次播放的 ID，避免重複初始化
+  final AudioRecorder _recorder = AudioRecorder();
+  String? _recordFilePath;
+  bool _uploading = false;
+  final List<String> _uploadedRecordingUrls = [];
 
   // Metronome
   int _metroBpm = 80;
@@ -52,6 +65,7 @@ class _PracticingScreenState extends State<PracticingScreen> {
   int _metroBeat = 0;
   Timer? _metroTimer;
   _MetronomeAudio? _metroAudio;
+  final List<Map<String, String>> _chatHistory = [];  // 記錄練習中的對話
 
   // Tuner — real microphone pitch detection
   StreamSubscription<Uint8List>? _micSub;
@@ -88,6 +102,12 @@ class _PracticingScreenState extends State<PracticingScreen> {
       song: widget.title,
       artist: widget.artist,
     );
+  }
+
+  void _recordChatMessage(String role, String text) {
+    setState(() {
+      _chatHistory.add({'role': role, 'text': text});
+    });
   }
 
   void _dismissStrumModal() {
@@ -127,6 +147,90 @@ class _PracticingScreenState extends State<PracticingScreen> {
     _metroTimer = null;
   }
 
+  Future<void> _startRecording() async {
+    try {
+      if (!await _recorder.hasPermission()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Microphone permission denied')),
+          );
+        }
+        return;
+      }
+
+      final dir = await getTemporaryDirectory();
+      final fileName = '${makeSongId(widget.title, widget.artist)}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path = '${dir.path}/$fileName';
+      _recordFilePath = path;
+
+      await _recorder.start(
+        RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
+      );
+    } catch (e) {
+      debugPrint('Start recording failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('錄音啟動失敗')),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopRecordingAndUpload() async {
+    try {
+      final stoppedPath = await _recorder.stop();
+      final filePath = stoppedPath ?? _recordFilePath;
+      if (filePath == null) return;
+
+      if (mounted) setState(() => _uploading = true);
+
+      final user = FirebaseAuth.instance.currentUser;
+      final uid = user?.uid ?? 'test_user_123';
+      final songId = makeSongId(widget.title, widget.artist);
+      final fileName = filePath.split(Platform.pathSeparator).last;
+      final storagePath = 'users/$uid/songLibrary/$songId/recordings/$fileName';
+
+      final ref = FirebaseStorage.instance.ref(storagePath);
+      final uploadTask = await ref.putFile(File(filePath));
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('songLibrary')
+          .doc(songId)
+          .collection('recordings')
+          .add({
+        'fileName': fileName,
+        'storagePath': storagePath,
+        'downloadUrl': downloadUrl,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      _uploadedRecordingUrls.add(downloadUrl);
+      _recordFilePath = null;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('錄音已上傳')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Stop recording failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('錄音上傳失敗')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
+  }
+
   void _initYoutubeController(String url) {
     final videoId = YoutubePlayerController.convertUrlToId(url);
     if (videoId != null && videoId != _lastVideoId) {
@@ -154,8 +258,8 @@ class _PracticingScreenState extends State<PracticingScreen> {
       _tunerNote = '--';
     });
     try {
-      // v0.6.x API: returns Future<Stream<Uint8List>?>
-      final stream = await MicStream.microphone(
+      // MicStream.microphone returns a Stream<Uint8List> directly.
+      final stream = MicStream.microphone(
         sampleRate: 44100,
         audioFormat: AudioFormat.ENCODING_PCM_16BIT,
       );
@@ -238,9 +342,14 @@ class _PracticingScreenState extends State<PracticingScreen> {
     if (mounted) setState(() { _tunerPitched = false; _tunerNote = '--'; });
   }
 
-  void _handleToolTap(String id) {
+  void _handleToolTap(String id) async {
     if (id == 'record') {
-      setState(() => _recording = !_recording);
+      if (_recording) {
+        await _stopRecordingAndUpload();
+      } else {
+        await _startRecording();
+      }
+      if (mounted) setState(() => _recording = !_recording);
       return;
     }
     if (_activePopup == id) {
@@ -263,8 +372,10 @@ class _PracticingScreenState extends State<PracticingScreen> {
     final aiService = Provider.of<AiMaterialService>(context);
     final practiceMaterial = aiService.currentMaterial;
 
-    final String videoUrl = practiceMaterial?['url'] ?? 
-        'https://www.youtube.com/watch?v=bx1Bh8ZvH84';
+    final String videoUrl =
+    widget.videoUrl ??
+    widget.practiceMaterial?['url'] ??
+    'https://www.youtube.com/watch?v=bx1Bh8ZvH84';
 
     if (practiceMaterial?['type'] == 'image') {
       // 圖片模式不需初始化播放器
@@ -438,6 +549,8 @@ class _PracticingScreenState extends State<PracticingScreen> {
                           'title': widget.title,
                           'artist': widget.artist,
                           'duration': _seconds,
+                          'recordingUrls': _uploadedRecordingUrls,
+                          'chatHistory': _chatHistory,
                         });
                       },
                       style: OutlinedButton.styleFrom(
@@ -462,7 +575,9 @@ class _PracticingScreenState extends State<PracticingScreen> {
           bottom: 84,
           right: 20,
           child: GestureDetector(
-            onTap: widget.onOpenAI,
+            onTap: () async {
+              widget.onOpenAI();
+            },
             child: Container(
               width: 52, height: 52,
               decoration: BoxDecoration(

@@ -1,6 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models/app_state.dart';
+import '../utils/song_id.dart';
 import '../widgets/section_header.dart';
 import 'shop_screen.dart';
 
@@ -64,13 +68,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     ('💎', 'Level\n7'),
   ];
 
-  static const _staticDiary = [
-    (date: 'May 3, 2026', songs: ['Wonderwall – 22 min', 'Blackbird – 8 min'], note: 'Chord transitions feeling smoother today!', xp: '+85 XP'),
-    (date: 'May 2, 2026', songs: ['Hotel California – 30 min'], note: 'Struggled with the solo part, need to slow down.', xp: '+95 XP'),
-    (date: 'Apr 30, 2026', songs: ['Wish You Were Here – 20 min', "Knockin' On Heaven's Door – 15 min"], note: 'Great session! Both songs almost complete.', xp: '+110 XP'),
-    (date: 'Apr 29, 2026', songs: ['Nothing Else Matters – 25 min'], note: 'Starting to get the fingerpicking pattern.', xp: '+80 XP'),
-  ];
-
   static String _fmtDate(DateTime dt) {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${months[dt.month - 1]} ${dt.day}, ${dt.year}';
@@ -82,28 +79,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _openDailyLog(String date, List<_SongLogData> songs) {
-    setState(() { _showDailyLog = true; _dailyLogDate = date; _dailyLogSongs = songs; });
+    setState(() {
+      _showDailyLog = true;
+      _dailyLogDate = date;
+      _dailyLogSongs = songs;
+    });
   }
 
-  static String _dummyAiNote(String title) =>
-      'Your timing on "$title" is improving steadily. Focus on keeping consistent pressure on chord shapes during transitions — there\'s a small hesitation around the bridge that a few slow-practice reps will fix. Overall a solid session!';
+  String _fallbackAiNote(String title) {
+    return 'Great practice session on "$title"! Keep working on chord transitions and timing consistency.';
+  }
 
-  static List<String> _dummyRecordings(String dateStr) => [
-    'rec_${dateStr.replaceAll(', ', '_').replaceAll(' ', '_')}_001.m4a',
-    'rec_${dateStr.replaceAll(', ', '_').replaceAll(' ', '_')}_002.m4a',
-  ];
-
-  static _SongLogData _parseStaticSong(String songStr, String note, String dateStr) {
-    final parts = songStr.split(' – ');
-    final title = parts[0];
-    final minutes = parts.length > 1 ? int.tryParse(parts[1].replaceAll(' min', '').trim()) ?? 0 : 0;
-    return _SongLogData(
-      title: title, artist: '',
-      durationSeconds: minutes * 60,
-      userNote: note,
-      aiNote: _dummyAiNote(title),
-      recordings: _dummyRecordings(dateStr),
-    );
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _sessionsStream {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('sessions')
+        .orderBy('practiceDate', descending: true)
+        .snapshots();
   }
 
   @override
@@ -307,43 +301,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     SectionHeader(label: 'Practice Diary', t: t),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        children: [
-                          for (final entry in widget.diaryEntries) ...[
-                            _DiaryCard(
-                              t: t,
-                              date: _fmtDate(entry.date),
-                              songs: ['${entry.title} – ${_fmtDuration(entry.duration)}'],
-                              xp: '+${(entry.duration / 10 + 3).clamp(3, 15).floor() * 5} XP',
-                              onTap: () => _openDailyLog(
-                                _fmtDate(entry.date),
-                                [_SongLogData(
-                                  title: entry.title,
-                                  artist: entry.artist,
-                                  durationSeconds: entry.duration,
-                                  userNote: entry.userNote,
-                                  aiNote: _dummyAiNote(entry.title),
-                                  recordings: _dummyRecordings(_fmtDate(entry.date)),
-                                )],
+                      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                        stream: _sessionsStream,
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 20),
+                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            );
+                          }
+
+                          final docs = snapshot.data?.docs ?? [];
+                          if (docs.isEmpty) {
+                            if (widget.diaryEntries.isNotEmpty) {
+                              return Column(
+                                children: [
+                                  for (final entry in widget.diaryEntries) ...[
+                                    _DiaryCard(
+                                      t: t,
+                                      date: _fmtDate(entry.date),
+                                      songs: ['${entry.title} – ${_fmtDuration(entry.duration)}'],
+                                      xp: '+${(entry.duration / 10 + 3).clamp(3, 15).floor() * 5} XP',
+                                      onTap: () => _openDailyLog(
+                                        _fmtDate(entry.date),
+                                        [_SongLogData(
+                                          title: entry.title,
+                                          artist: entry.artist,
+                                          durationSeconds: entry.duration,
+                                          userNote: entry.userNote,
+                                          aiNote: _fallbackAiNote(entry.title),
+                                          recordings: [],
+                                        )],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 10),
+                                  ],
+                                ],
+                              );
+                            }
+
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Text(
+                                'No practice sessions yet. Finish a session to see your diary here.',
+                                style: TextStyle(fontSize: 13, color: t.textMuted),
+                                textAlign: TextAlign.center,
                               ),
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                          for (final entry in _staticDiary) ...[
-                            _DiaryCard(
-                              t: t,
-                              date: entry.date,
-                              songs: entry.songs,
-                              xp: entry.xp,
-                              onTap: () => _openDailyLog(
-                                entry.date,
-                                [for (int i = 0; i < entry.songs.length; i++)
-                                  _parseStaticSong(entry.songs[i], i == 0 ? entry.note : '', entry.date)],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                        ],
+                            );
+                          }
+
+                          return Column(
+                            children: [
+                              for (final doc in docs) ...[
+                                Builder(builder: (context) {
+                                  final data = doc.data();
+                                  final title = data['title'] as String? ?? 'Untitled';
+                                  final artist = data['artist'] as String? ?? '';
+                                  final duration = (data['durationSec'] as num?)?.toInt() ?? 0;
+                                  final userNote = data['userNote'] as String? ?? '';
+                                  final practiceDate = data['practiceDate'] as String? ?? '';
+                                  final sessionInfo = data['sessionInfo'] as Map<String, dynamic>?;
+                                  final recordings = (data['recordingUrls'] as List?)?.whereType<String>().toList() ?? [];
+                                  final displayDate = practiceDate.isNotEmpty
+                                      ? _fmtDate(DateTime.tryParse(practiceDate) ?? DateTime.now())
+                                      : _fmtDate(DateTime.now());
+                                  final aiNote = sessionInfo?['aiComment'] as String? ?? _fallbackAiNote(title);
+                                  return Column(
+                                    children: [
+                                      _DiaryCard(
+                                        t: t,
+                                        date: displayDate,
+                                        songs: ['${title} – ${_fmtDuration(duration)}'],
+                                        xp: '+${(duration / 10 + 3).clamp(3, 15).floor() * 5} XP',
+                                        onTap: () => _openDailyLog(
+                                          displayDate,
+                                          [
+                                            _SongLogData(
+                                              title: title,
+                                              artist: artist,
+                                              durationSeconds: duration,
+                                              userNote: userNote,
+                                              aiNote: aiNote,
+                                              recordings: recordings,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                  );
+                                }),
+                              ],
+                            ],
+                          );
+                        },
                       ),
                     ),
                   ],
@@ -672,7 +723,7 @@ class _DailyLogPage extends StatelessWidget {
   }
 }
 
-class _SongLogCard extends StatelessWidget {
+class _SongLogCard extends StatefulWidget {
   final AppTheme t;
   final _SongLogData song;
 
@@ -684,12 +735,58 @@ class _SongLogCard extends StatelessWidget {
   }
 
   @override
+  State<_SongLogCard> createState() => _SongLogCardState();
+}
+
+class _SongLogCardState extends State<_SongLogCard> {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _playingUrl;
+
+  String get _uid => FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> get _recordingsStream {
+    final songId = makeSongId(widget.song.title, widget.song.artist);
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('songLibrary')
+        .doc(songId)
+        .collection('recordings')
+        .orderBy('createdAt', descending: true)
+        .snapshots();
+  }
+
+  @override
+  void dispose() {
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _togglePlayback(String url) async {
+    if (_playingUrl == url) {
+      await _audioPlayer.pause();
+      setState(() => _playingUrl = null);
+      return;
+    }
+
+    await _audioPlayer.stop();
+    await _audioPlayer.play(UrlSource(url));
+    setState(() => _playingUrl = url);
+  }
+
+  String _formatTimestamp(Timestamp? ts) {
+    if (ts == null) return 'Unknown date';
+    final dt = ts.toDate();
+    return '${dt.month}/${dt.day}/${dt.year} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: t.surface,
+        color: widget.t.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: t.border),
+        border: Border.all(color: widget.t.border),
         boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)],
       ),
       child: Column(
@@ -702,29 +799,29 @@ class _SongLogCard extends StatelessWidget {
               children: [
                 Container(
                   width: 38, height: 38,
-                  decoration: BoxDecoration(color: t.accentSoft, borderRadius: BorderRadius.circular(11)),
-                  child: Icon(Icons.music_note, size: 20, color: t.accent),
+                  decoration: BoxDecoration(color: widget.t.accentSoft, borderRadius: BorderRadius.circular(11)),
+                  child: Icon(Icons.music_note, size: 20, color: widget.t.accent),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(song.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: t.text)),
-                      if (song.artist.isNotEmpty)
-                        Text(song.artist, style: TextStyle(fontSize: 12, color: t.textSec)),
+                      Text(widget.song.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: widget.t.text)),
+                      if (widget.song.artist.isNotEmpty)
+                        Text(widget.song.artist, style: TextStyle(fontSize: 12, color: widget.t.textSec)),
                     ],
                   ),
                 ),
                 Container(
-                  decoration: BoxDecoration(color: t.accentSoft, borderRadius: BorderRadius.circular(8)),
+                  decoration: BoxDecoration(color: widget.t.accentSoft, borderRadius: BorderRadius.circular(8)),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   child: Row(
                     children: [
-                      Icon(Icons.timer_outlined, size: 12, color: t.accent),
+                      Icon(Icons.timer_outlined, size: 12, color: widget.t.accent),
                       const SizedBox(width: 4),
-                      Text(_fmtDur(song.durationSeconds),
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: t.accent)),
+                      Text(_SongLogCard._fmtDur(widget.song.durationSeconds),
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: widget.t.accent)),
                     ],
                   ),
                 ),
@@ -732,65 +829,137 @@ class _SongLogCard extends StatelessWidget {
             ),
           ),
 
-          Divider(color: t.borderLight, height: 1),
+          Divider(color: widget.t.borderLight, height: 1),
 
           // Your notes
           _LogSection(
-            t: t,
+            t: widget.t,
             icon: Icons.edit_note_outlined,
             label: 'YOUR NOTES',
             iconColor: const Color(0xFF5B8DEF),
-            child: song.userNote.isNotEmpty
-                ? Text(song.userNote,
-                    style: TextStyle(fontSize: 13, color: t.text, height: 1.6))
+            child: widget.song.userNote.isNotEmpty
+                ? Text(widget.song.userNote,
+                    style: TextStyle(fontSize: 13, color: widget.t.text, height: 1.6))
                 : Text('No notes added for this session.',
-                    style: TextStyle(fontSize: 13, color: t.textMuted, fontStyle: FontStyle.italic)),
+                    style: TextStyle(fontSize: 13, color: widget.t.textMuted, fontStyle: FontStyle.italic)),
           ),
 
-          Divider(color: t.borderLight, height: 1),
+          Divider(color: widget.t.borderLight, height: 1),
 
           // AI Coach notes
           _LogSection(
-            t: t,
+            t: widget.t,
             icon: Icons.chat_bubble_outline,
             label: 'AI COACH',
             iconColor: const Color(0xFF1A7A5E),
-            child: Text(song.aiNote,
-                style: TextStyle(fontSize: 13, color: t.text, height: 1.6)),
+            child: Text(widget.song.aiNote,
+                style: TextStyle(fontSize: 13, color: widget.t.text, height: 1.6)),
           ),
 
-          Divider(color: t.borderLight, height: 1),
+          Divider(color: widget.t.borderLight, height: 1),
 
           // Recordings
           _LogSection(
-            t: t,
+            t: widget.t,
             icon: Icons.mic_none_outlined,
             label: 'RECORDINGS',
             iconColor: AppColors.red,
-            child: Column(
-              children: [
-                for (final rec in song.recordings)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: t.surfaceAlt,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: t.borderLight),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _recordingsStream,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                  );
+                }
+
+                final docs = snapshot.data?.docs ?? [];
+                if (docs.isEmpty) {
+                  if (widget.song.recordings.isEmpty) {
+                    return Text('No recordings found for this song yet.', style: TextStyle(fontSize: 13, color: widget.t.textMuted));
+                  }
+                  return Column(
+                    children: [
+                      for (final rec in widget.song.recordings)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: widget.t.surfaceAlt,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: widget.t.borderLight),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(Icons.play_circle_outline, size: 20, color: widget.t.accent),
+                                const SizedBox(width: 10),
+                                Expanded(child: Text(rec,
+                                    style: TextStyle(fontSize: 12, color: widget.t.textSec, fontFamily: 'monospace'))),
+                                Icon(Icons.download_outlined, size: 18, color: widget.t.textMuted),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  );
+                }
+
+                return Column(
+                  children: [
+                    for (final doc in docs)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: GestureDetector(
+                          onTap: () {
+                            final downloadUrl = doc.data()['downloadUrl'] as String?;
+                            if (downloadUrl != null && downloadUrl.isNotEmpty) {
+                              _togglePlayback(downloadUrl);
+                            }
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: widget.t.surfaceAlt,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: widget.t.borderLight),
+                            ),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  _playingUrl == (doc.data()['downloadUrl'] as String?)
+                                      ? Icons.pause_circle_outline
+                                      : Icons.play_circle_outline,
+                                  size: 20,
+                                  color: widget.t.accent,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        doc.data()['fileName'] as String? ?? 'Recording',
+                                        style: TextStyle(fontSize: 12, color: widget.t.textSec, fontFamily: 'monospace'),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        _formatTimestamp(doc.data()['createdAt'] as Timestamp?),
+                                        style: TextStyle(fontSize: 10, color: widget.t.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.download_outlined, size: 18, color: widget.t.textMuted),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      child: Row(
-                        children: [
-                          Icon(Icons.play_circle_outline, size: 20, color: t.accent),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(rec,
-                              style: TextStyle(fontSize: 12, color: t.textSec, fontFamily: 'monospace'))),
-                          Icon(Icons.download_outlined, size: 18, color: t.textMuted),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
         ],

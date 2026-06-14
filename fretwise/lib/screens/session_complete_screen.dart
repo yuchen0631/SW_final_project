@@ -11,8 +11,10 @@ class SessionCompleteScreen extends StatefulWidget {
   final String title;
   final String artist;
   final int duration;
+  final List<String> recordingUrls;
   final VoidCallback onOpenAI;
   final void Function(String note)? onSaveNote;
+  final List<Map<String, String>> chatHistory;
 
   const SessionCompleteScreen({
     super.key,
@@ -21,8 +23,10 @@ class SessionCompleteScreen extends StatefulWidget {
     required this.title,
     required this.artist,
     required this.duration,
+    required this.recordingUrls,
     required this.onOpenAI,
     this.onSaveNote,
+    required this.chatHistory,
   });
 
   @override
@@ -62,6 +66,16 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
         final callable = FirebaseFunctions.instance.httpsCallable(
           'recordSession',
         );
+        
+        // 整合練習中的 AI 對話歷史
+        final allChatHistory = [...widget.chatHistory];
+        if (_feedbackCtrl.text.trim().isNotEmpty) {
+          allChatHistory.add({
+            'role': 'user',
+            'text': 'Session feedback: ${_feedbackCtrl.text.trim()}',
+          });
+        }
+        
         final payload = {
           'song': {
             'title': widget.title,
@@ -70,8 +84,6 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
             'defaultSectionLabel': null,
             'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
           },
-          'songProfile': null,
-          'profile': null,
           'userThoughts': {
             'practiceDate': DateTime.now().toIso8601String().split('T')[0],
             'durationSec': widget.duration,
@@ -79,9 +91,10 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                 ? null
                 : _feedbackCtrl.text.trim(),
             'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
-            'recordingUrls': [],
+            'recordingUrls': widget.recordingUrls,
+            'chatHistory': allChatHistory,
             'startedAt': null,
-            'endedAt': 'SERVER_TIMESTAMP',
+            'endedAt': DateTime.now().toIso8601String(),
           },
         };
 

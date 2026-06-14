@@ -12,6 +12,7 @@ android {
     namespace = "com.fretwise.fretwise"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    buildToolsVersion = flutter.buildToolsVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

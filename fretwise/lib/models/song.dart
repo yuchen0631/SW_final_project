@@ -12,6 +12,7 @@ class SongEntry {
   final int bpm;
   final bool isArchived;
   final bool isFavorite;
+  final String? videoUrl;
 
   SongEntry({
     required this.id,
@@ -24,6 +25,7 @@ class SongEntry {
     this.bpm = 80,
     this.isArchived = false,
     this.isFavorite = false,
+    this.videoUrl,
   });
 
   factory SongEntry.fromFirestore(DocumentSnapshot doc) {
@@ -39,6 +41,7 @@ class SongEntry {
       bpm: data['bpm'] ?? 80,
       isArchived: data['isArchived'] ?? false,
       isFavorite: data['isFavorite'] ?? false,
+      videoUrl: data['videoUrl'] as String?,
     );
   }
 }

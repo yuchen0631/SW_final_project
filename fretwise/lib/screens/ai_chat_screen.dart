@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 class AIChatScreen extends StatefulWidget {
   final AppTheme t;
@@ -21,6 +22,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
   bool _loading = false;
+  List<Map<String, String>>? _capturedHistory;  // 用來傳回 PracticingScreen
 
   AppTheme get t => widget.t;
 
@@ -43,12 +45,12 @@ class _AIChatScreenState extends State<AIChatScreen> {
     'Song for beginners',
   ];
 
-  static const _responses = {
-    'How do I play F chord?': 'The F chord is one of the trickiest for beginners! Start with a partial barre on strings 1-2 at fret 1, then build up. Practice the barre slowly — your index finger needs time to build strength.',
-    '30-min practice plan': 'Try: 5 min warmup (chromatic exercises), 10 min technique (scales or a hard passage), 10 min song work, 5 min cool-down. Keep a timer and stay focused!',
-    'Fix barre chords': 'Three tips: 1) Place your finger close to the fret, 2) Use the bony edge of your finger, 3) Keep your thumb behind the middle finger. Daily 5-minute barre practice goes a long way!',
-    'Song for beginners': 'Try "Knockin\' on Heaven\'s Door" by Bob Dylan — just G, D, and Am/C. Or "Horse With No Name" by America with only two chords. Both are great for building confidence!',
-  };
+  // static const _responses = {
+  //   'How do I play F chord?': 'The F chord is one of the trickiest for beginners! Start with a partial barre on strings 1-2 at fret 1, then build up. Practice the barre slowly — your index finger needs time to build strength.',
+  //   '30-min practice plan': 'Try: 5 min warmup (chromatic exercises), 10 min technique (scales or a hard passage), 10 min song work, 5 min cool-down. Keep a timer and stay focused!',
+  //   'Fix barre chords': 'Three tips: 1) Place your finger close to the fret, 2) Use the bony edge of your finger, 3) Keep your thumb behind the middle finger. Daily 5-minute barre practice goes a long way!',
+  //   'Song for beginners': 'Try "Knockin\' on Heaven\'s Door" by Bob Dylan — just G, D, and Am/C. Or "Horse With No Name" by America with only two chords. Both are great for building confidence!',
+  // };
 
   Future<void> _send([String? text]) async {
     final msg = text ?? _inputCtrl.text.trim();
@@ -60,18 +62,35 @@ class _AIChatScreenState extends State<AIChatScreen> {
     });
     _scrollToBottom();
 
-    // Simulate a response
-    await Future.delayed(const Duration(milliseconds: 1200));
-    if (!mounted) return;
+    try {
+      final history = _messages
+          .where((m) => !(m.role == 'user' && m.text == msg))
+          .map((m) => {'role': m.role, 'text': m.text})
+          .toList();
 
-    final reply = _responses[msg] ??
-        'Great question! As your AI guitar coach, I\'d say: focus on consistency over intensity. Even 15 minutes daily beats a 2-hour weekend session. Keep playing! 🎸';
+      final callable = FirebaseFunctions.instance.httpsCallable('chatWithCoach');
+      final resp = await callable.call({
+        'message': msg,
+        'history': history,
+        'song': {'title': 'Guitar Practice', 'artist': 'Session'},
+      });
 
-    setState(() {
-      _messages.add((role: 'assistant', text: reply));
-      _loading = false;
-    });
-    _scrollToBottom();
+      final reply = (resp.data['reply'] as String? ?? 'Keep practicing! 🎸').trim();
+      if (!mounted) return;
+      setState(() {
+        _messages.add((role: 'assistant', text: reply));
+        _loading = false;
+      });
+      _scrollToBottom();
+    } catch (e) {
+      debugPrint('Chat error: $e');
+      if (!mounted) return;
+      setState(() {
+        _messages.add((role: 'assistant', text: 'Connection issue. Try again!'));
+        _loading = false;
+      });
+      _scrollToBottom();
+    }
   }
 
   void _scrollToBottom() {
@@ -90,6 +109,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
   void dispose() {
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
+    // 把對話歷史傳回去給 PracticingScreen 如果需要的話
+    _capturedHistory = _messages.map((m) => {'role': m.role, 'text': m.text}).toList();
     super.dispose();
   }
 

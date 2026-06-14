@@ -251,6 +251,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
           title: props['title'] as String? ?? 'Wonderwall',
           artist: props['artist'] as String? ?? 'Oasis',
           bpm: props['bpm'] as int? ?? 87,
+          videoUrl: props['videoUrl'] as String?,
           onOpenAI: _openAI,
           practiceMaterial: aiService.currentMaterial,
         );
@@ -262,9 +263,14 @@ class _FretwiseShellState extends State<FretwiseShell> {
           title: props['title'] as String? ?? 'Wonderwall',
           artist: props['artist'] as String? ?? 'Oasis',
           duration: props['duration'] as int? ?? 0,
+          recordingUrls: props['recordingUrls'] != null
+              ? List<String>.from(props['recordingUrls'] as List)
+              : [],
+          chatHistory: props['chatHistory'] != null
+              ? (props['chatHistory'] as List).map((m) => Map<String, String>.from(m as Map)).toList()
+              : [],
           onOpenAI: _openAI,
-          onSaveNote: (note) =>
-              context.read<AppState>().updateLatestDiaryNote(note),
+          onSaveNote: (note) => context.read<AppState>().updateLatestDiaryNote(note),
         );
 
       case 'inspiration':
