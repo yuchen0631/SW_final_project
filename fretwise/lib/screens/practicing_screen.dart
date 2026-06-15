@@ -7,7 +7,6 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:mic_stream/mic_stream.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:record/record.dart';
@@ -50,6 +49,7 @@ class _PracticingScreenState extends State<PracticingScreen> {
   int _seconds = 0;
   bool _running = true;
   bool _recording = false;
+  bool _isPaused = false;
   String? _activePopup; // 'tuner' | 'metronome' | null
   static bool _strumModalDismissed = false;
   bool _showStrumModal = !_strumModalDismissed;
@@ -181,6 +181,12 @@ class _PracticingScreenState extends State<PracticingScreen> {
         ),
         path: path,
       );
+      if (mounted) {
+        setState(() {
+          _recording = true;
+          _isPaused = false;
+        });
+      }
     } catch (e) {
       debugPrint('Start recording failed: $e');
       if (mounted) {
@@ -191,9 +197,41 @@ class _PracticingScreenState extends State<PracticingScreen> {
     }
   }
 
+  Future<void> _pauseRecording() async {
+    try {
+      await _recorder.pause();
+      if (mounted) {
+        setState(() {
+          _isPaused = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Pause recording failed: $e');
+    }
+  }
+
+  Future<void> _resumeRecording() async {
+    try {
+      await _recorder.resume();
+      if (mounted) {
+        setState(() {
+          _isPaused = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Resume recording failed: $e');
+    }
+  }
+
   Future<void> _stopRecordingAndUpload() async {
     try {
       final stoppedPath = await _recorder.stop();
+      if (mounted) {
+        setState(() {
+          _recording = false;
+          _isPaused = false;
+        });
+      }
       final filePath = stoppedPath ?? _recordFilePath;
       if (filePath == null) return;
 
@@ -269,10 +307,13 @@ class _PracticingScreenState extends State<PracticingScreen> {
     });
     try {
       // MicStream.microphone returns a Stream<Uint8List> directly.
-      final stream = MicStream.microphone(
+      final stream = await _recorder.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.pcm16bits, // 轉成相同的 PCM 16bit 格式
         sampleRate: 44100,
-        audioFormat: AudioFormat.ENCODING_PCM_16BIT,
-      );
+        numChannels: 1,
+      ),
+    );
       
       _micSub = stream.listen(
         (chunk) {
@@ -353,15 +394,6 @@ class _PracticingScreenState extends State<PracticingScreen> {
   }
 
   void _handleToolTap(String id) async {
-    if (id == 'record') {
-      if (_recording) {
-        await _stopRecordingAndUpload();
-      } else {
-        await _startRecording();
-      }
-      if (mounted) setState(() => _recording = !_recording);
-      return;
-    }
     if (_activePopup == id) {
       setState(() => _activePopup = null);
       if (id == 'metronome') { _metroRunning = false; _stopMetronome(); }
@@ -488,7 +520,26 @@ class _PracticingScreenState extends State<PracticingScreen> {
                     children: [
                       Expanded(child: _ToolButton(id: 'tuner', label: 'Tuner', icon: Icons.graphic_eq, color: AppColors.blue, active: _activePopup == 'tuner', t: t, onTap: () => _handleToolTap('tuner'))),
                       const SizedBox(width: 10),
-                      Expanded(child: _ToolButton(id: 'record', label: _recording ? 'Stop' : 'Record', icon: Icons.mic, color: AppColors.red, active: _recording, t: t, onTap: () => _handleToolTap('record'))),
+                      Expanded(
+                        child: _ToolButton(
+                          id: 'record',
+                          label: !_recording ? 'Record' : (_isPaused ? 'Resume' : 'Pause'),
+                          icon: !_recording ? Icons.mic : (_isPaused ? Icons.mic : Icons.pause),
+                          color: AppColors.red,
+                          active: _recording,
+                          t: t,
+                          onTap: () {
+                            if (!_recording) {
+                              _startRecording();
+                            } else if (_isPaused) {
+                              _resumeRecording();
+                            } else {
+                              _pauseRecording();
+                            }
+                          },
+                          onLongPress: _recording ? _stopRecordingAndUpload : null,
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(child: _ToolButton(id: 'metronome', label: 'Metronome', icon: Icons.tune, color: AppColors.green, active: _activePopup == 'metronome', t: t, onTap: () => _handleToolTap('metronome'))),
                     ],
@@ -555,15 +606,18 @@ class _PracticingScreenState extends State<PracticingScreen> {
                   child: SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         setState(() => _running = false);
+                        if (_recording) {
+                          await _stopRecordingAndUpload();
+                        }
                         _triggerBackgroundAiWorkflow();
                         widget.navigate('sessionComplete', props: {
+                          'songId': widget.songId,
                           'title': widget.title,
                           'artist': widget.artist,
                           'duration': _seconds,
                           'recordingUrls': _uploadedRecordingUrls,
-                          'chatHistory': _chatHistory,
                         });
                       },
                       style: OutlinedButton.styleFrom(
@@ -744,6 +798,7 @@ class _ToolButton extends StatelessWidget {
   final bool active;
   final AppTheme t;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _ToolButton({
     required this.id,
@@ -753,6 +808,7 @@ class _ToolButton extends StatelessWidget {
     required this.active,
     required this.t,
     required this.onTap,
+    this.onLongPress,
   });
 
   @override
@@ -760,6 +816,7 @@ class _ToolButton extends StatelessWidget {
     final isRecord = id == 'record';
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(

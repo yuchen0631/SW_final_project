@@ -14,14 +14,13 @@ dependencies:
   provider: ^6.1.2
   audioplayers: ^6.1.0
   pitch_detector_dart: ^0.0.7
-  mic_stream: ^0.7.2
   firebase_core: ^4.10.0
   firebase_auth: ^6.5.1
   cloud_firestore: ^6.4.1
   cloud_functions: ^6.3.1
   firebase_storage: ^13.4.2
   path_provider: ^2.0.15
-  record: ^7.1.0
+  record: ^6.2.1
   device_calendar: ^4.3.3
   timezone: ^0.9.4
   youtube_player_flutter: ^10.0.1

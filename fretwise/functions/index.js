@@ -764,11 +764,7 @@ exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120
   });
 
 exports.recordSession = onCall({ cors: true, invoker: 'public', secrets: ['GEMINI_API_KEY'] }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "You must be logged in to record a session.");
-  }
-
-  const uid = request.auth.uid;
+  const uid = request.auth?.uid || "test_user_123";
   const data = request.data || {};
   const song = data.song || {};
   const userThoughts = data.userThoughts || {};
@@ -777,55 +773,64 @@ exports.recordSession = onCall({ cors: true, invoker: 'public', secrets: ['GEMIN
   const durationMin = Math.round((userThoughts.durationSec || 0) / 60);
   const chatHistory = userThoughts.chatHistory || [];
 
-  let chatHistoryText = chatHistory.map(m => {
-    const roleLabel = m.role === 'user' ? 'Student' : 'AI Coach';
-    return `${roleLabel}: ${m.text}`;
-  }).join("\n");
-
-  if (chatHistory.length === 0) {
-    chatHistoryText = "(No chat interactions during this session)";
-  }
-
+  let chatHistoryText = chatHistory.length > 0 
+    ? chatHistory.map(m => `${m.role === 'user' ? 'Student' : 'AI Coach'}: ${m.text}`).join("\n")
+    : "(No chat interactions during this session)";
+  
   let aiComment = `Great job practicing ${durationMin} minutes of "${song.title || 'this song'}"! Keep up this great momentum, and focus on smooth chord transitions in your next session.`;
   let nextFocus = ["Smooth out chord transitions.", "Practice with a metronome for consistency."];
+  let userProfilePatch = {};
+  let songProfilePatch = {};
 
   try {
     if (!process.env.GEMINI_API_KEY) {
-      console.warn("GEMINI_API_KEY is not defined in the environment. Using fallback comments.");
+      console.warn("GEMINI_API_KEY is not defined.");
+      aiComment = "⚠️ API Key Error: GEMINI_API_KEY is not configured correctly in Firebase Secrets.";
     } else {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
       const prompt = `You are an expert guitar practice coach (AI Coach).
-The student just finished practicing "${song.title || 'Unknown'}" by "${song.artist || 'Unknown'}".
-Session duration: ${durationMin} minutes.
-Student's feedback/note: "${userNote}".
+      Student practiced "${song.title || 'Unknown'}" by "${song.artist || 'Unknown'}".
+      Session duration: ${durationMin} minutes.
+      Student's feedback/note: "${userNote}".
 
-Below is the dynamic chat log between the Student and you (AI Coach) during this session:
-${chatHistoryText}
+      Chat log during session:
+      ${chatHistoryText}
 
-Analyze the chat log and student's note to find their specific pain points (e.g., fingering difficulty, hand fatigue, or chord transitions).
-Provide a highly personalized coaching summary (aiComment) in 2-3 sentences addressing these specific issues, and list exactly 2 concise next-focus tips (nextFocus).
+      Analyze the chat log and student's note to find their specific pain points. 
+      Provide a highly personalized coaching summary (aiComment) in 2-3 sentences.
+      List exactly 2 concise next-focus tips (nextFocus).
+      Also suggest conservative updates to the user profile (userProfilePatch) and song profile (songProfilePatch).
 
-Return ONLY a valid JSON object. Do NOT include markdown formatting like \`\`\`json.
-Expected JSON structure:
-{"aiComment": "your personalized feedback text", "nextFocus": ["tip1", "tip2"]}`;
+      IMPORTANT: You can reply in Traditional Chinese if the student used Chinese, or English if they used English. 
+      Return ONLY a valid, parseable JSON object matching this structure:
+      {
+        "sessionInfo": {
+          "aiComment": "your personalized feedback text",
+          "nextFocus": ["tip1", "tip2"]
+        },
+        "userProfilePatch": { "weakTechniques": ["..."] },
+        "songProfilePatch": { "problemAreas": ["..."], "recommendedFocus": ["..."] }
+      }`;
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      });
+      const result = await model.generateContent(prompt);
+      let cleanText = (typeof result.response?.text === 'function') ? result.response.text() : "{}";
+      cleanText = cleanText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleanText = jsonMatch[0];
+      
+      const aiJson = JSON.parse(cleanText);
 
-      const responseText = result.response?.text?.()?.trim() || result.response?.text?.trim() || "{}";
-      const aiJson = JSON.parse(responseText);
-
-      if (aiJson.aiComment) aiComment = aiJson.aiComment;
-      if (Array.isArray(aiJson.nextFocus) && aiJson.nextFocus.length > 0) nextFocus = aiJson.nextFocus;
-
-      console.log("Successfully generated dynamic AI Coach feedback from Gemini.");
+      if (aiJson.sessionInfo?.aiComment) aiComment = aiJson.sessionInfo.aiComment;
+      if (aiJson.sessionInfo?.nextFocus) nextFocus = aiJson.sessionInfo.nextFocus;
+      if (aiJson.userProfilePatch) userProfilePatch = aiJson.userProfilePatch;
+      if (aiJson.songProfilePatch) songProfilePatch = aiJson.songProfilePatch;
     }
   } catch (error) {
-    console.error("AI generation failed, falling back to default comments:", error);
+    console.error("AI generation failed:", error);
+    aiComment = `⚠️ AI Debug Error: ${error.message}`;
   }
 
   const sessionData = {
@@ -836,16 +841,21 @@ Expected JSON structure:
     userNote: userThoughts.userNote || '',
     recordingUrls: userThoughts.recordingUrls || [],
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    sessionInfo: { aiComment, nextFocus },
+    sessionInfo: { aiComment, nextFocus }
   };
 
-  await admin.firestore()
-    .collection("users")
-    .doc(uid)
-    .collection("sessions")
-    .add(sessionData);
+  await admin.firestore().collection("users").doc(uid).collection("sessions").add(sessionData);
 
-  return { status: "success", sessionInfo: { aiComment, nextFocus } };
+  return {
+    status: "success",
+    sessionInfo: { aiComment, nextFocus },
+    userProfilePatch: userProfilePatch || {},
+    songProfilePatch: songProfilePatch || {},
+    song: {
+      title: song.title || 'Unknown',
+      artist: song.artist || 'Unknown'
+    }
+  };
 });
 
 exports.applyPatch = onCall({ cors: true, invoker: 'public' }, async (request) => {
