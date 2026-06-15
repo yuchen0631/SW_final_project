@@ -96,7 +96,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         .collection('users')
         .doc(uid)
         .collection('sessions')
-        .orderBy('practiceDate', descending: true)
+        .orderBy('createdAt', descending: true)
         .snapshots();
   }
 

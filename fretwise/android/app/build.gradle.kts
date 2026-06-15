@@ -12,7 +12,7 @@ android {
     namespace = "com.fretwise.fretwise"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
-    buildToolsVersion = flutter.buildToolsVersion
+    //buildToolsVersion(flutter.buildToolsVersion)
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -20,7 +20,8 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        @Suppress("DEPRECATION")
+        jvmTarget = "17"
     }
 
     defaultConfig {
