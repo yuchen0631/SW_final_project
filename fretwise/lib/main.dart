@@ -479,6 +479,13 @@ class _FretwiseShellState extends State<FretwiseShell> {
         );
 
       case 'sessionComplete':
+        final pKey = _practicingChatKey({
+          'songId': props['songId'],
+          'title': props['title'] as String?,
+          'artist': props['artist'] as String?,
+        });
+        final sessionChat = _practicingChats[pKey] ?? [];
+
         return SessionCompleteScreen(
           t: t,
           navigate: _navigate,
@@ -488,9 +495,7 @@ class _FretwiseShellState extends State<FretwiseShell> {
           recordingUrls: props['recordingUrls'] != null
               ? List<String>.from(props['recordingUrls'] as List)
               : [],
-          chatHistory: props['chatHistory'] != null
-              ? (props['chatHistory'] as List).map((m) => Map<String, String>.from(m as Map)).toList()
-              : [],
+          chatHistory: sessionChat.map((m) => {'role': m.role, 'text': m.text}).toList(),
           onOpenAI: _openAI,
           onSaveNote: (note) => context.read<AppState>().updateLatestDiaryNote(note),
         );

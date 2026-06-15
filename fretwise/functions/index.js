@@ -1,4 +1,4 @@
-const { onCall } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 const { GoogleGenerativeAI, SchemaType } = require("@google/generative-ai");
 
@@ -425,3 +425,121 @@ exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120
     const uid = request.auth ? request.auth.uid : "test_user_123";
     return updateFeedSkill(request.data, uid);
   });
+
+exports.recordSession = onCall({ cors: true, invoker: 'public', secrets: ['GEMINI_API_KEY'] }, async (request) => {
+  const uid = request.auth?.uid || "test_user_123";
+  const data = request.data || {};
+  const song = data.song || {};
+  const userThoughts = data.userThoughts || {};
+
+  const userNote = userThoughts.userNote || "No specific thoughts shared.";
+  const durationMin = Math.round((userThoughts.durationSec || 0) / 60);
+  const chatHistory = userThoughts.chatHistory || [];
+
+  let chatHistoryText = chatHistory.length > 0 
+    ? chatHistory.map(m => `${m.role === 'user' ? 'Student' : 'AI Coach'}: ${m.text}`).join("\n")
+    : "(No chat interactions during this session)";
+  
+  let aiComment = `Great job practicing ${durationMin} minutes of "${song.title || 'this song'}"! Keep up this great momentum, and focus on smooth chord transitions in your next session.`;
+  let nextFocus = ["Smooth out chord transitions.", "Practice with a metronome for consistency."];
+  let userProfilePatch = {};
+  let songProfilePatch = {};
+
+  try {
+    if (!process.env.GEMINI_API_KEY) {
+      console.warn("GEMINI_API_KEY is not defined.");
+      aiComment = "⚠️ API Key Error: GEMINI_API_KEY is not configured correctly in Firebase Secrets.";
+    } else {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const prompt = `You are an expert guitar practice coach (AI Coach).
+Student practiced "${song.title || 'Unknown'}" by "${song.artist || 'Unknown'}".
+Session duration: ${durationMin} minutes.
+Student's feedback/note: "${userNote}".
+
+Chat log during session:
+${chatHistoryText}
+
+Analyze the chat log and student's note to find their specific pain points. 
+Provide a highly personalized coaching summary (aiComment) in 2-3 sentences, list exactly 2 concise next-focus tips (nextFocus).
+Also suggest conservative updates to the user profile (userProfilePatch) and song profile (songProfilePatch).
+
+IMPORTANT: Use pure English only. DO NOT use any emojis, Chinese, or non-ASCII characters in your response.
+
+Return ONLY a valid JSON object matching this structure:
+{
+  "sessionInfo": {
+    "aiComment": "your personalized feedback text",
+    "nextFocus": ["tip1", "tip2"]
+  },
+  "userProfilePatch": { "weakTechniques": ["..."] },
+  "songProfilePatch": { "problemAreas": ["..."], "recommendedFocus": ["..."] }
+}`;
+
+      const result = await model.generateContent(prompt);
+      let cleanText = (typeof result.response?.text === 'function') ? result.response.text() : "{}";
+      cleanText = cleanText.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim();
+      
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) cleanText = jsonMatch[0];
+      
+      const aiJson = JSON.parse(cleanText);
+
+      if (aiJson.sessionInfo?.aiComment) aiComment = aiJson.sessionInfo.aiComment;
+      if (aiJson.sessionInfo?.nextFocus) nextFocus = aiJson.sessionInfo.nextFocus;
+      if (aiJson.userProfilePatch) userProfilePatch = aiJson.userProfilePatch;
+      if (aiJson.songProfilePatch) songProfilePatch = aiJson.songProfilePatch;
+    }
+  } catch (error) {
+    console.error("AI generation failed:", error);
+    aiComment = `⚠️ AI Debug Error: ${error.message}`;
+  }
+
+  const sessionData = {
+    title: song.title || 'Unknown',
+    artist: song.artist || 'Unknown',
+    practiceDate: userThoughts.practiceDate || new Date().toISOString().split('T')[0],
+    durationSec: userThoughts.durationSec || 0,
+    userNote: userThoughts.userNote || '',
+    recordingUrls: userThoughts.recordingUrls || [],
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    sessionInfo: { aiComment, nextFocus }
+  };
+
+  await admin.firestore().collection("users").doc(uid).collection("sessions").add(sessionData);
+
+  return {
+    status: "success",
+    sessionInfo: { aiComment, nextFocus },
+    userProfilePatch,
+    songProfilePatch
+  };
+});
+
+exports.applyPatch = onCall({ cors: true, invoker: 'public' }, async (request) => {
+  const uid = request.auth?.uid || 'test_user_123';
+  const data = request.data || {};
+  const userProfilePatch = data.userProfilePatch || {};
+  const songProfilePatch = data.songProfilePatch || {};
+  const song = data.song || {};
+  const db = admin.firestore();
+  const promises = [];
+
+  if (Object.keys(userProfilePatch).length) {
+    promises.push(db.collection('users').doc(uid).set({ profile: userProfilePatch }, { merge: true }));
+  }
+
+  if (Object.keys(songProfilePatch).length && song.title && song.artist) {
+    const songId = makeSongId(song.title, song.artist);
+    promises.push(db.collection('users').doc(uid).collection('songProfiles').doc(songId).set(songProfilePatch, { merge: true }));
+  }
+
+  try {
+    await Promise.all(promises);
+    return { success: true };
+  } catch (error) {
+    console.error('applyPatch failed:', error);
+    throw new Error('Failed to apply patch');
+  }
+});

@@ -42,6 +42,8 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
   Map<String, dynamic>? _aiResponse;
   bool _applyingPatch = false;
   bool _showAiModal = false;
+  bool _isSaving = false;
+  String _targetDestination = 'home';
 
   AppTheme get t => widget.t;
 
@@ -58,84 +60,90 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
 
   // song id helper moved to lib/utils/song_id.dart
 
-  Future<void> _handleSaveAndNavigate() async {
+  Future<void> _handleSaveAndNavigate(String destination) async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+      _targetDestination = destination;
+    });
+
     widget.onSaveNote?.call(_feedbackCtrl.text.trim());
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null) {
-        final callable = FirebaseFunctions.instance.httpsCallable(
-          'recordSession',
-        );
-        
-        // 整合練習中的 AI 對話歷史
-        final allChatHistory = [...widget.chatHistory];
-        if (_feedbackCtrl.text.trim().isNotEmpty) {
-          allChatHistory.add({
-            'role': 'user',
-            'text': 'Session feedback: ${_feedbackCtrl.text.trim()}',
-          });
-        }
-        
-        final payload = {
-          'song': {
-            'title': widget.title,
-            'artist': widget.artist,
-            'progressPercent': 0,
-            'defaultSectionLabel': null,
-            'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
-          },
-          'userThoughts': {
-            'practiceDate': DateTime.now().toIso8601String().split('T')[0],
-            'durationSec': widget.duration,
-            'userNote': _feedbackCtrl.text.trim().isEmpty
-                ? null
-                : _feedbackCtrl.text.trim(),
-            'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
-            'recordingUrls': widget.recordingUrls,
-            'chatHistory': allChatHistory,
-            'startedAt': null,
-            'endedAt': DateTime.now().toIso8601String(),
-          },
-        };
-
-        final result = await callable.call(payload);
-        print('recordSession result: ${result.data}');
-        setState(() {
-          _aiResponse = result.data as Map<String, dynamic>?;
-          _showAiModal = true;
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'recordSession',
+      );
+      
+      // 整合練習中的 AI 對話歷史
+      final allChatHistory = [...widget.chatHistory];
+      if (_feedbackCtrl.text.trim().isNotEmpty) {
+        allChatHistory.add({
+          'role': 'user',
+          'text': 'Session feedback: ${_feedbackCtrl.text.trim()}',
         });
+      }
+      
+      final payload = {
+        'song': {
+          'title': widget.title,
+          'artist': widget.artist,
+          'progressPercent': 0,
+          'defaultSectionLabel': null,
+          'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
+        },
+        'userThoughts': {
+          'practiceDate': DateTime.now().toIso8601String().split('T')[0],
+          'durationSec': widget.duration,
+          'userNote': _feedbackCtrl.text.trim().isEmpty
+              ? null
+              : _feedbackCtrl.text.trim(),
+          'deadlineDate': _deadlineDate.isEmpty ? null : _deadlineDate,
+          'recordingUrls': widget.recordingUrls,
+          'chatHistory': allChatHistory,
+          'startedAt': null,
+          'endedAt': DateTime.now().toIso8601String(),
+        },
+      };
 
-        // Best-effort: set firstCompleteDate on user's songProfiles doc if missing
-        final songId = makeSongId(widget.title, widget.artist);
-        final docRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .collection('songProfiles')
-            .doc(songId);
-        final doc = await docRef.get();
-        final nowDate = DateTime.now().toIso8601String().split('T')[0];
-        if (!doc.exists) {
-          await docRef.set({
-            'firstCompleteDate': nowDate,
-            'title': widget.title,
-            'artist': widget.artist,
-          });
-        } else {
-          final data = doc.data();
-          if (data != null &&
-              (data['firstCompleteDate'] == null ||
-                  data['firstCompleteDate'] == '')) {
-            await docRef.update({'firstCompleteDate': nowDate});
-          }
+      final result = await callable.call(payload);
+      print('recordSession result: ${result.data}');
+      setState(() {
+        _aiResponse = result.data as Map<String, dynamic>?;
+        _showAiModal = true;
+      });
+
+      // Best-effort: set firstCompleteDate on user's songProfiles doc if missing
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
+      final songId = makeSongId(widget.title, widget.artist);
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('songProfiles')
+          .doc(songId);
+      final doc = await docRef.get();
+      final nowDate = DateTime.now().toIso8601String().split('T')[0];
+      if (!doc.exists) {
+        await docRef.set({
+          'firstCompleteDate': nowDate,
+          'title': widget.title,
+          'artist': widget.artist,
+        });
+      } else {
+        final data = doc.data();
+        if (data != null &&
+            (data['firstCompleteDate'] == null ||
+                data['firstCompleteDate'] == '')) {
+          await docRef.update({'firstCompleteDate': nowDate});
         }
       }
     } catch (e) {
       print('recordSession error: $e');
     }
 
-    // If the AI modal didn't open (user null, or Firebase error), go home directly
+    setState(() => _isSaving = false);
+
+    // If the AI modal didn't open (Firebase error), go home directly
     if (!_showAiModal) {
-      widget.navigate('home');
+      widget.navigate(_targetDestination);
     }
   }
 
@@ -470,7 +478,7 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () => _handleSaveAndNavigate(),
+                        onPressed: _isSaving ? null : () => _handleSaveAndNavigate('home'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: t.accent,
                           padding: const EdgeInsets.symmetric(vertical: 15),
@@ -479,24 +487,23 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                           ),
                           elevation: 0,
                         ),
-                        child: const Text(
-                          'Back to Home',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: _isSaving && _targetDestination == 'home'
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : const Text(
+                                'Back to Home',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
                       ),
                     ),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () {
-                          widget.onSaveNote?.call(_feedbackCtrl.text.trim());
-                          widget.navigate('library');
-                        },
+                        onPressed: _isSaving ? null : () => _handleSaveAndNavigate('library'),
                         style: OutlinedButton.styleFrom(
                           side: BorderSide(color: t.border, width: 1.5),
                           padding: const EdgeInsets.symmetric(vertical: 15),
@@ -504,14 +511,16 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        child: Text(
-                          'Go to my Library',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: t.text,
-                          ),
-                        ),
+                        child: _isSaving && _targetDestination == 'library'
+                            ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: t.accent, strokeWidth: 2))
+                            : Text(
+                                'Go to my Library',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: t.text,
+                                ),
+                              ),
                       ),
                     ),
                   ],
@@ -792,7 +801,7 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                             setState(() {
                               _showAiModal = false;
                             });
-                            widget.navigate('home');
+                            widget.navigate(_targetDestination);
                           },
                           child: Text('Skip', style: TextStyle(color: t.text)),
                         ),
@@ -803,34 +812,31 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                               : () async {
                                   setState(() => _applyingPatch = true);
                                   try {
-                                    final user =
-                                        FirebaseAuth.instance.currentUser;
-                                    if (user != null) {
-                                      final callable = FirebaseFunctions
-                                          .instance
-                                          .httpsCallable('applyPatch');
-                                      final payload = {
-                                        'uid': user.uid,
-                                        'userProfilePatch':
-                                            _aiResponse!['userProfilePatch'],
-                                        'songProfilePatch':
-                                            _aiResponse!['songProfilePatch'],
-                                        'song':
-                                            _aiResponse!['song'] ??
-                                            {
-                                              'title': widget.title,
-                                              'artist': widget.artist,
-                                            },
-                                      };
-                                      final resp = await callable.call(payload);
-                                      print('applyPatch resp: ${resp.data}');
-                                    }
+                                    final uid = FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
+                                    final callable = FirebaseFunctions
+                                        .instance
+                                        .httpsCallable('applyPatch');
+                                    final payload = {
+                                      'uid': uid,
+                                      'userProfilePatch':
+                                          _aiResponse!['userProfilePatch'],
+                                      'songProfilePatch':
+                                          _aiResponse!['songProfilePatch'],
+                                      'song':
+                                          _aiResponse!['song'] ??
+                                          {
+                                            'title': widget.title,
+                                            'artist': widget.artist,
+                                          },
+                                    };
+                                    final resp = await callable.call(payload);
+                                    print('applyPatch resp: ${resp.data}');
                                   } catch (e) {
                                     print('applyPatch error: $e');
                                   }
                                   setState(() => _applyingPatch = false);
                                   setState(() => _showAiModal = false);
-                                  widget.navigate('home');
+                                  widget.navigate(_targetDestination);
                                 },
                           child: _applyingPatch
                               ? const SizedBox(

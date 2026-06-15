@@ -558,11 +558,11 @@ class _PracticingScreenState extends State<PracticingScreen> {
                         setState(() => _running = false);
                         _triggerBackgroundAiWorkflow();
                         widget.navigate('sessionComplete', props: {
+                          'songId': widget.songId,
                           'title': widget.title,
                           'artist': widget.artist,
                           'duration': _seconds,
                           'recordingUrls': _uploadedRecordingUrls,
-                          'chatHistory': _chatHistory,
                         });
                       },
                       style: OutlinedButton.styleFrom(

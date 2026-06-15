@@ -311,6 +311,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             );
                           }
 
+                          if (snapshot.hasError) {
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 20),
+                              child: Text('Error loading sessions: ${snapshot.error}', style: TextStyle(color: AppColors.red)),
+                            );
+                          }
+
                           final docs = snapshot.data?.docs ?? [];
                           if (docs.isEmpty) {
                             if (widget.diaryEntries.isNotEmpty) {
