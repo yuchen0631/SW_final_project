@@ -73,7 +73,6 @@ async function getRealYouTubeVideo(songTitle, artist, excludeUrls = new Set(), m
   return null;
 }
 
-// --- 巧君負責的功能 1: 搜尋歌曲 ---
 async function searchSongSkill(args, uid) {
   console.log(`[SKILL] searchSong called! uid=${uid} args=${JSON.stringify(args)}`);
 
@@ -661,83 +660,102 @@ exports.chatWithCoach = onCall({ cors: true, invoker: "public", secrets: ["GEMIN
 });
 
 // --- 巧君負責的功能 2: 更新 Feed (無限延伸 + 隨機版) ---
+// --- 修正後的 更新 Feed 功能 ---
 async function updateFeedSkill(args, uid) {
-    console.log(`[SKILL] updateFeed called! uid=${uid} args=${JSON.stringify(args)}`);
+  console.log(`[SKILL] updateFeed 執行中, uid=${uid}`);
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const db = admin.firestore();
-    const feedCol = db.collection('users').doc(uid).collection('feed');
+  const db = admin.firestore();
+  const feedCol = db.collection('users').doc(uid).collection('feed');
 
-    // Write music preferences extracted by the AI coach
+  // 1. 讀取使用者的真實偏好 (從 Firestore 抓取)
+  const userSnap = await db.collection('users').doc(uid).get();
+  const userData = userSnap.data() || {};
+  const prefs = userData.preferences || {};
+  
+  const favoriteArtists = (prefs.favoriteArtists || []).join(', ') || "Popular artists";
+  const favoriteGenres = (prefs.favoriteGenres || []).join(', ') || "Pop, Rock";
+  const skillLevel = (userData.profile?.skillLevel) || "beginner";
+
+  try {
+    // 2. 清空舊的 Feed (為了確保滑動體驗，建議每次更新時更換內容，或限制總量)
+    const oldDocs = await feedCol.get();
+    const batch = db.batch();
+    oldDocs.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    let songs = [];
     try {
-      const prefPatch = {};
-      if (args.likedArtists?.length)    prefPatch.favoriteArtists  = admin.firestore.FieldValue.arrayUnion(...args.likedArtists);
-      if (args.dislikedArtists?.length) prefPatch.dislikedArtists  = admin.firestore.FieldValue.arrayUnion(...args.dislikedArtists);
-      if (args.likedGenres?.length)     prefPatch.favoriteGenres   = admin.firestore.FieldValue.arrayUnion(...args.likedGenres);
-      if (args.dislikedGenres?.length)  prefPatch.dislikedGenres   = admin.firestore.FieldValue.arrayUnion(...args.dislikedGenres);
-      if (args.tempoPreference)         prefPatch.tempoPreference  = args.tempoPreference;
-      if (Object.keys(prefPatch).length) {
-        await db.collection('users').doc(uid).set({ preferences: prefPatch }, { merge: true });
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // 建議用 flash 比較快
+
+      const prompt = `You are an expert guitar teacher. 
+      Recommend 10 popular songs for a student with these tastes:
+      - Liked Artists: ${favoriteArtists}
+      - Preferred Genres: ${favoriteGenres}
+      - Skill Level: ${skillLevel}
+
+      Return ONLY a JSON array. DO NOT include markdown tags like \`\`\`json.
+      Expected JSON structure:
+      [{"title": "Song Title", "artist": "Artist", "description": "Why this song is great for you", "genre": "Pop"}]`;
+
+      const result = await model.generateContent(prompt);
+      let responseText = result.response.text().trim();
+      
+      // 移除可能出現的 markdown 標籤
+      if (responseText.startsWith('```')) {
+        responseText = responseText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
       }
-    } catch (e) {
-      console.error('updateFeed preference write failed:', e);
+      songs = JSON.parse(responseText);
+      console.log(`[AI] 成功生成 ${songs.length} 首歌`);
+
+    } catch (aiError) {
+      console.error("Gemini 呼叫失敗，啟用備用名單", aiError);
+      // 3. 修正後的備用名單 (Fallback)
+      const fallbackPool = [
+        { "title": "Shake It Off", "artist": "Taylor Swift", "description": "Classic G-Am-C progression. Perfect for upbeat strumming practice.", "genre": "Pop" },
+        { "title": "good 4 u", "artist": "Olivia Rodrigo", "description": "Energetic Pop-Rock. Uses simple power chords that are easier than full bar chords.", "genre": "Pop Rock" },
+        { "title": "Love Story", "artist": "Taylor Swift", "description": "The ultimate Country-Pop anthem. Great for practicing steady down-up strums.", "genre": "Country" },
+        { "title": "bad idea right?", "artist": "Olivia Rodrigo", "description": "Upbeat and fun. Focuses on rhythmic muting and simple chord changes.", "genre": "Pop Rock" },
+        { "title": "You Belong With Me", "artist": "Taylor Swift", "description": "Classic Taylor country style. Very straightforward open chords.", "genre": "Country Pop" },
+        { "title": "Cruel Summer", "artist": "Taylor Swift", "description": "High energy Pop. Great for practicing timing and syncopated strumming.", "genre": "Pop" },
+        { "title": "Complicated", "artist": "Avril Lavigne", "description": "Early 2000s Pop Rock. Very similar to Olivia Rodrigo's style, easy 4-chord progression.", "genre": "Pop Rock" },
+        { "title": "Paper Rings", "artist": "Taylor Swift", "description": "Fast-paced and joyful. Excellent for building speed in chord transitions.", "genre": "Pop Rock" },
+        { "title": "vampire", "artist": "Olivia Rodrigo", "description": "Builds from piano to rock. We've simplified the guitar arrangement for you.", "genre": "Pop Rock" },
+        { "title": "Espresso", "artist": "Sabrina Carpenter", "description": "Current upbeat Pop. Fun catchy rhythm that fits your pop preference.", "genre": "Pop" },
+        { "title": "Party In The U.S.A.", "artist": "Miley Cyrus", "description": "Very easy 3-chord song. Fits the country-pop crossover vibe perfectly.", "genre": "Pop" },
+        { "title": "Mean", "artist": "Taylor Swift", "description": "Upbeat country folk. Great for practicing fast folk-style strumming.", "genre": "Country" },
+        { "title": "Sk8er Boi", "artist": "Avril Lavigne", "description": "High energy pop-punk. Uses simple power chords, very beginner friendly.", "genre": "Pop Rock" },
+        { "title": "Stay Stay Stay", "artist": "Taylor Swift", "description": "Cute and upbeat. Very simple chords (G, C, D, Em) throughout.", "genre": "Country Pop" },
+        { "title": "deja vu", "artist": "Olivia Rodrigo", "description": "Atmospheric but steady rhythm. Good for practicing consistent strumming.", "genre": "Pop Rock" },
+        { "title": "Our Song", "artist": "Taylor Swift", "description": "Early Taylor country vibes. Focuses on the 'D-Em-G-A' progression.", "genre": "Country" },
+        { "title": "Flowers", "artist": "Miley Cyrus", "description": "Modern upbeat pop. The bassline-inspired strumming is very satisfying to play.", "genre": "Pop" },
+        { "title": "Man! I Feel Like A Woman!", "artist": "Shania Twain", "description": "Classic upbeat Country Rock. High energy and great for performance.", "genre": "Country Rock" },
+        { "title": "22", "artist": "Taylor Swift", "description": "Pure fun. Simple pop chords with a very infectious upbeat rhythm.", "genre": "Pop" },
+        { "title": "ballad of a homeschooled girl", "artist": "Olivia Rodrigo", "description": "Grungy and upbeat. Simple riffs that sound harder than they are.", "genre": "Pop Rock" }
+      ];
+    
+      songs = fallbackPool.sort(() => 0.5 - Math.random());
     }
 
-    try {
-      // 🚨 這裡已經刪除「清空資料庫」的邏輯，現在會無限往後加！
-
-      let songs = [];
-      try {
-        const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-        // 💡 加上隨機時間種子，強迫 AI 每次都推薦不一樣的歌
-        const randomSeed = Date.now();
-        const prompt = `你是一個吉他老師。請「隨機」推薦 3 首適合吉他練習的流行曲（隨機種子：${randomSeed}，確保與之前不同）。只回傳 JSON 陣列，絕對不要包含任何其他文字。格式: [{"title":"歌曲名","artist":"歌手","description":"推薦原因"}]`;
-
-        const result = await model.generateContent(prompt);
-        let aiResponse = result.response.text().trim();
-
-        const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          songs = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error("找不到 JSON 陣列");
-        }
-      } catch (aiError) {
-        console.error("Gemini 解析失敗，啟用隨機備用名單");
-        // 💡 備用歌單擴充，並加入隨機洗牌機制
-        const fallbackPool = [
-          { title: "愛人錯過", artist: "告五人", description: "AI 備用推薦：節奏輕快，非常適合新手練習刷法。" },
-          { title: "Perfect", artist: "Ed Sheeran", description: "AI 備用推薦：經典的吉他情歌，和弦進行簡單。" },
-          { title: "Yellow", artist: "Coldplay", description: "AI 備用推薦：特殊的吉他調音與迷人的刷奏。" },
-          { title: "說好不哭", artist: "周杰倫", description: "AI 備用推薦：經典神曲，練習和弦轉換的好選擇。" },
-          { title: "Photograph", artist: "Ed Sheeran", description: "AI 備用推薦：優美的指彈前奏，適合進階練習。" },
-          { title: "擁抱", artist: "五月天", description: "AI 備用推薦：最經典的吉他社入門必學曲目。" },
-        ];
-        // 隨機洗牌，挑前 3 首
-        fallbackPool.sort(() => 0.5 - Math.random());
-        songs = fallbackPool.slice(0, 3);
-      }
-
-      // 將歌曲丟給爬蟲，並存入 Firebase
-      for (const s of songs) {
-        const url = await getRealYouTubeVideo(s.title, s.artist);
-        await feedCol.add({
-          title: s.title || "Unknown",
-          artist: s.artist || "Unknown",
-          videoUrl: url,
-          description: s.description || "AI 推薦教學",
-          genre: "Pop/Rock",
-          actionState: "ignored",
-          // 💡 加入時間戳，這是前端排序的依據
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-      }
-
-      return { success: true };
-    } catch (error) {
-      console.error("Feed 生成錯誤:", error);
-      throw new Error("Internal Server Error");
+    // 4. 抓取 YouTube 影片並存入 Firebase
+    for (const s of songs) {
+      const url = await getRealYouTubeVideo(s.title, s.artist);
+      await feedCol.add({
+        title: s.title,
+        artist: s.artist,
+        videoUrl: url,
+        description: s.description,
+        genre: s.genre || "Recommended",
+        actionState: "ignored",
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     }
+
+    return { success: true };
+  } catch (error) {
+    console.error("Feed 生成過程嚴重錯誤:", error);
+    throw new HttpsError("internal", error.message);
+  }
 }
 
 exports.updateFeed = onCall({ cors: true, invoker: "public", timeoutSeconds: 120, secrets: ["GEMINI_API_KEY"] }, async (request) => {

@@ -115,55 +115,43 @@ class AppState extends ChangeNotifier {
         .map((snap) => snap.docs.map((d) => FeedItem.fromFirestore(d)).toList());
   }
 
-  // Library Page: 呼叫 AI 搜尋歌曲資訊
- // ... 前面的 import 不變
-
-// Library Page: 呼叫 AI 搜尋歌曲資訊
-// ... 其他部分不變
-
-// Library Page: 呼叫 AI 搜尋歌曲資訊
+// 💡 修改：如果是新歌才回傳 SongEntry，重複則回傳 null
   Future<SongEntry?> searchSongToLibrary(String title, String artist) async {
     _isLoadingAddSong = true;
     notifyListeners();
 
+    // 1. 先檢查有沒有重複
     final existingId = await findExistingSongId(title, artist);
     if (existingId != null) {
-      print('ℹ️ 歌曲已存在，準備進入練習頁面');
+      print('ℹ️ 歌曲已存在，觸發 Library 高亮提示');
+      setHighlightedSong(existingId); // 觸發發光邏輯
       _isLoadingAddSong = false;
       notifyListeners();
-      
-      // 💡 取得已存在的歌曲資料回傳
-      final doc = await FirebaseFirestore.instance
-          .collection('users').doc(currentUserId)
-          .collection('songLibrary').doc(existingId).get();
-      return SongEntry.fromFirestore(doc);
+      return null; // 💡 重點：回傳 null，叫前端不要跳轉
     }
 
     try {
-      // 呼叫雲端 Function
       final result = await FirebaseFunctions.instance.httpsCallable('searchSong').call({
         'title': title,
         'artist': artist,
       });
-      
-       if (result.data['songId'] != null) {
+
+      if (result.data['songId'] != null) {
         final newId = result.data['songId'];
-        // 💡 取得剛新增成功的歌曲資料回傳
         final doc = await FirebaseFirestore.instance
             .collection('users').doc(currentUserId)
             .collection('songLibrary').doc(newId).get();
         
-        return SongEntry.fromFirestore(doc);
+        print('✅ 成功新增新歌曲，準備進入練習頁面');
+        return SongEntry.fromFirestore(doc); // 💡 只有新歌才回傳實體
       }
-      
     } catch (e) {
-      print('⚠️ 雲端失敗，進入本地保險機制: $e');
-      // ... (保留你原本 catch 裡面的保險機制程式碼即可)
+      print('⚠️ 雲端失敗: $e');
     } finally {
       _isLoadingAddSong = false;
       notifyListeners();
     }
-     return null;
+    return null;
   }
 
   // 2. 修正按讚取消邏輯
@@ -223,6 +211,21 @@ class AppState extends ChangeNotifier {
   }
 
   bool ownsItem(String id) => _ownedItems.contains(id);
+
+    Future<void> deleteSong(String songId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUserId) // 這樣才讀得到 currentUserId
+          .collection('songLibrary')
+          .doc(songId)
+          .delete();
+      print('✅ 歌曲已從資料庫刪除');
+    } catch (e) {
+      debugPrint('刪除歌曲失敗: $e');
+    }
+  }
+
 }
 
 class AiMaterialService extends ChangeNotifier {
