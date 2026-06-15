@@ -300,6 +300,7 @@ CRITICAL CONSTRAINTS:
 4. VERY IMPORTANT: You have a strict output token limit. Keep all text fields (like "instructions" and "summary") EXTREMELY short (1-2 sentences max). Limit the number of tasks per day to at most 2-3 to ensure the entire 28-day JSON plan fits in the response without being truncated.
 5. EXTREMELY IMPORTANT: You MUST ONLY schedule practice sessions on the days of the week specified in 'profile.preferredDayAndTime'. For all other days of the week, you MUST schedule 0 minutes of practice and NO tasks. If 'profile.preferredDayAndTime' is empty or null, schedule normally. But if it has days listed (e.g. "Monday, 8:00 pm"), those are the ONLY days the user can practice.
 6. DO NOT COMPENSATE: If a preferred practice day is blocked by externalCalendar events or dayAndTimeRule, DO NOT attempt to "make up" the missed practice by scheduling on other days. Just skip it entirely. Under NO circumstances should you schedule practice on a non-preferred day.
+7. ALWAYS output valid JSON. If you cannot fit all tasks into the allowed preferred days without violating constraints, DROP the remaining tasks. It is better to have fewer tasks than to schedule on a forbidden day. NEVER output conversational text or apologies.
 
 User Data:\n\n${JSON.stringify(aiInput, null, 2)}`;
 
@@ -315,7 +316,13 @@ User Data:\n\n${JSON.stringify(aiInput, null, 2)}`;
 
       // 7. Parse AI response
       const cleanJsonStr = text.replace(/```json\n?|```/g, "").trim();
-      const aiOutput = JSON.parse(cleanJsonStr);
+      let aiOutput;
+      try {
+        aiOutput = JSON.parse(cleanJsonStr);
+      } catch (parseErr) {
+        logger.error("JSON Parse Error. Raw text:", text);
+        throw new Error("AI output was not valid JSON: " + text.substring(0, 500));
+      }
 
       // 7. Extract items
       const planObj = aiOutput.practicePlan || {};
@@ -434,7 +441,7 @@ User Data:\n\n${JSON.stringify(aiInput, null, 2)}`;
       };
     } catch (err) {
       logger.error("updatePlan failed", { error: err.message, stack: err.stack, responseText: typeof text !== 'undefined' ? text : null });
-      throw new HttpsError("internal", err.message === "Unexpected end of JSON input" || err instanceof SyntaxError ? "AI returned invalid JSON. End of string: " + (typeof text !== 'undefined' ? text.substring(text.length - 500) : 'undefined') : err.message);
+      throw new HttpsError("aborted", err.message === "Unexpected end of JSON input" || err instanceof SyntaxError ? "AI returned invalid JSON. End of string: " + (typeof text !== 'undefined' ? text.substring(Math.max(0, text.length - 500)) : 'undefined') : err.message);
     }
   
 }
@@ -762,8 +769,8 @@ async function updateFeedSkill(args, uid) {
 
       return { success: true };
     } catch (error) {
-      console.error("Feed 生成錯誤:", error);
-      throw new Error("Internal Server Error");
+      logger.error("Error generating feed:", error);
+      throw new HttpsError("internal", error.message || "Unknown error occurred");
     }
 }
 
