@@ -267,27 +267,25 @@ class _VideoFeedItemState extends State<_VideoFeedItem> {
                       widget.navigate('library');
                       print('🔍 發現重複，跳轉至 Library 並發光');
                     } else {
-                      await widget.appState.searchSongToLibrary(
+                      final newSong = await widget.appState.searchSongToLibrary(
                         widget.item.title,
                         widget.item.artist,
                       );
-                      widget.navigate(
-                        'practicing',
-                        props: {
-                          'title': widget.item.title,
-                          'artist': widget.item.artist,
-                        },
-                      );
+                      if (!context.mounted) return;
+                      if (newSong != null) {
+                        widget.navigate(
+                          'practicing',
+                          props: {
+                            'title': newSong.title,
+                            'artist': newSong.artist,
+                            'bpm': newSong.bpm,
+                            'songId': newSong.id,
+                          },
+                        );
+                      } else {
+                        widget.navigate('library');
+                      }
                     }
-                    // 💡 點擊練習，自動將歌加入 Library，並跳轉
-                    widget.appState.searchSongToLibrary(
-                      widget.item.title,
-                      widget.item.artist,
-                    );
-                    widget.navigate(
-                      'practicing',
-                      props: {'title': widget.item.title},
-                    );
                   },
                   child: const Text(
                     "Let's practice",
