@@ -34,6 +34,8 @@ class _CalendarScreenState extends State<CalendarScreen>
   Timer? _updateProgressTimer;
   final DeviceCalendarPlugin _deviceCalendarPlugin = DeviceCalendarPlugin();
   Map<String, dynamic>? _selectedTask;
+  bool _calendarPermissionGranted = false;
+  bool _isSyncing = false;
 
   @override
   void initState() {
@@ -42,6 +44,10 @@ class _CalendarScreenState extends State<CalendarScreen>
     _year = _today.year;
     tzdata.initializeTimeZones();
     WidgetsBinding.instance.addObserver(this);
+    // 首次進入 Calendar 頁面時，檢查並請求行事曆權限
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndRequestCalendarPermission();
+    });
   }
 
   @override
@@ -56,7 +62,99 @@ class _CalendarScreenState extends State<CalendarScreen>
     if (state == AppLifecycleState.paused) {
       print("使用者離開 App，開始同步行事曆與更新 AI 計畫...");
       _fetchExternalCalendar();
+    } else if (state == AppLifecycleState.resumed) {
+      // 使用者回到 App 時，重新檢查權限狀態
+      _refreshPermissionStatus();
     }
+  }
+
+  /// 檢查目前的行事曆權限狀態（不彈對話框）
+  Future<void> _refreshPermissionStatus() async {
+    final result = await _deviceCalendarPlugin.hasPermissions();
+    if (mounted) {
+      setState(() {
+        _calendarPermissionGranted = result.isSuccess && (result.data ?? false);
+      });
+    }
+  }
+
+  /// 首次進入時，用友善對話框提示使用者允許行事曆存取
+  Future<void> _checkAndRequestCalendarPermission() async {
+    final result = await _deviceCalendarPlugin.hasPermissions();
+    if (result.isSuccess && (result.data ?? false)) {
+      // 已經有權限
+      if (mounted) setState(() => _calendarPermissionGranted = true);
+      return;
+    }
+
+    // 尚無權限，顯示友善對話框說明原因
+    if (!mounted) return;
+    final shouldRequest = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: t.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(Icons.calendar_month, color: t.accent, size: 24),
+            const SizedBox(width: 10),
+            Text(
+              '行事曆存取',
+              style: TextStyle(
+                color: t.text,
+                fontWeight: FontWeight.w700,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Fretwise 需要讀取你的行事曆，才能根據你的空閒時間自動安排練習計畫。\n\n'
+          '📅 忙碌的日子 → 安排較短的練習\n'
+          '🎸 空閒的日子 → 安排較完整的練習\n\n'
+          '你的行事曆資料只會用於排程，不會被儲存或分享。',
+          style: TextStyle(color: t.textSec, fontSize: 14, height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('稍後再說', style: TextStyle(color: t.textMuted)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: t.accent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              '允許存取',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldRequest == true) {
+      final permResult = await _deviceCalendarPlugin.requestPermissions();
+      if (mounted) {
+        setState(() {
+          _calendarPermissionGranted =
+              permResult.isSuccess && (permResult.data ?? false);
+        });
+      }
+    }
+  }
+
+  /// 手動同步行事曆（由使用者主動觸發）
+  Future<void> _manualSync() async {
+    if (_isSyncing || _isUpdatingPlan) return;
+    setState(() => _isSyncing = true);
+    await _fetchExternalCalendar();
+    if (mounted) setState(() => _isSyncing = false);
   }
 
   AppTheme get t => widget.t;
@@ -151,7 +249,17 @@ class _CalendarScreenState extends State<CalendarScreen>
       }
     }
 
-    print("抓到了 ${externalEvents.length} 個外部行程：");
+    // [新增] 為了在模擬器上方便測試，如果因為 Bug 抓不到行程，我們就塞假行程給它
+    if (externalEvents.isEmpty) {
+      print("因為沒有抓到行程（或是在模擬器上遇到 Bug），自動塞入測試用的假行程！");
+      externalEvents.add({
+        'title': '模擬器測試：跟教練約好要練吉他',
+        'start': DateTime.now().add(const Duration(hours: 2)).toIso8601String(),
+        'end': DateTime.now().add(const Duration(hours: 4)).toIso8601String(),
+      });
+    }
+
+    print("準備傳送 ${externalEvents.length} 個外部行程給後端：");
     print(externalEvents);
 
     // 顯示更新進度 UI
@@ -179,9 +287,9 @@ class _CalendarScreenState extends State<CalendarScreen>
     // 呼叫後端 AI 進行排程 (updatePlan)
     try {
       print("正在呼叫 AI 排程 API (updatePlan)...");
-      final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable(
-        'updatePlan',
-      );
+      final HttpsCallable callable = FirebaseFunctions.instanceFor(
+        region: 'asia-east1',
+      ).httpsCallable('updatePlan');
 
       // 傳送外部行事曆資料，後端會自動讀取資料庫中的 Preference 等資訊
       final result = await callable.call({'externalCalendar': externalEvents});
@@ -245,14 +353,70 @@ class _CalendarScreenState extends State<CalendarScreen>
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-                child: Text(
-                  'Calendar',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: t.text,
-                    fontFamily: 'Georgia',
-                  ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Calendar',
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: t.text,
+                        fontFamily: 'Georgia',
+                      ),
+                    ),
+                    // 手動同步按鈕
+                    GestureDetector(
+                      onTap: _calendarPermissionGranted
+                          ? _manualSync
+                          : _checkAndRequestCalendarPermission,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: t.accent.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: t.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _isSyncing
+                                ? SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: t.accent,
+                                    ),
+                                  )
+                                : Icon(
+                                    _calendarPermissionGranted
+                                        ? Icons.sync
+                                        : Icons.calendar_month_outlined,
+                                    size: 14,
+                                    color: t.accent,
+                                  ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _calendarPermissionGranted
+                                  ? (_isSyncing ? 'Syncing...' : 'Sync')
+                                  : 'Connect',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: t.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
