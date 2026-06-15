@@ -26,10 +26,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
   final _titleCtrl = TextEditingController();
   final _artistCtrl = TextEditingController();
   String _searchQuery = '';
-  
+
   // 儲存每個卡片的 GlobalKey 以便捲動
   final Map<String, GlobalKey> _cardKeys = {};
-  
+
   // 記錄目前正在發光的歌曲 ID (本地狀態)
   String? _localHighlightedId;
 
@@ -55,17 +55,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final key = _cardKeys[songId];
         if (key?.currentContext != null) {
           // 3. 捲動到該項目，使其對齊畫面頂部 (alignment: 0.0)
-          Scrollable.ensureVisible(
-            key!.currentContext!,
-            duration: const Duration(milliseconds: 800),
-            curve: Curves.easeInOutQuart,
-            alignment: 0.0, 
-          );
-          
+          Scrollable.ensureVisible(key!.currentContext!, duration: const Duration(milliseconds: 800), curve: Curves.easeInOutQuart, alignment: 0.0);
+
           if (mounted) {
             // 4. 觸發本地發光狀態
             setState(() => _localHighlightedId = songId);
-            
+
             // 5. 精準 3 秒後自動熄滅
             Future.delayed(const Duration(seconds: 3), () {
               if (mounted) setState(() => _localHighlightedId = null);
@@ -88,12 +83,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
     if (newSong != null && mounted) {
       // 情況 A: 新歌 -> 跳轉到練習頁面
-      widget.navigate('practicing', props: {
-        'title': newSong.title,
-        'artist': newSong.artist,
-        'bpm': newSong.bpm,
-        'songId': newSong.id,
-      });
+      widget.navigate('practicing', props: {'title': newSong.title, 'artist': newSong.artist, 'bpm': newSong.bpm, 'songId': newSong.id});
     } else {
       // 情況 B: 重複歌曲 (searchSongToLibrary 會回傳 null 並設好全域 highlightedSongId)
       // 我們要強制清空搜尋與過濾，否則該卡片若被隱藏會捲動不到
@@ -126,10 +116,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
           final bDate = b.lastPracticedAt?.toDate().millisecondsSinceEpoch ?? 0;
           cmp = aDate.compareTo(bDate);
           break;
-        case 'progress': cmp = a.progressPercent.compareTo(b.progressPercent); break;
-        case 'title': cmp = a.title.compareTo(b.title); break;
-        case 'artist': cmp = a.artist.compareTo(b.artist); break;
-        default: cmp = 0;
+        case 'progress':
+          cmp = a.progressPercent.compareTo(b.progressPercent);
+          break;
+        case 'title':
+          cmp = a.title.compareTo(b.title);
+          break;
+        case 'artist':
+          cmp = a.artist.compareTo(b.artist);
+          break;
+        default:
+          cmp = 0;
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -138,11 +135,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   String _sortDirectionLabel(String key) {
     switch (key) {
-      case 'date': return _sortAsc ? 'Oldest first' : 'Newest first';
-      case 'progress': return _sortAsc ? 'Least → Most' : 'Most → Least';
+      case 'date':
+        return _sortAsc ? 'Oldest first' : 'Newest first';
+      case 'progress':
+        return _sortAsc ? 'Least → Most' : 'Most → Least';
       case 'title':
-      case 'artist': return _sortAsc ? 'A → Z' : 'Z → A';
-      default: return '';
+      case 'artist':
+        return _sortAsc ? 'A → Z' : 'Z → A';
+      default:
+        return '';
     }
   }
 
@@ -183,7 +184,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Library', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: t.text, fontFamily: 'Georgia')),
+                            Text(
+                              'Library',
+                              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: t.text, fontFamily: 'Georgia'),
+                            ),
                             const SizedBox(height: 4),
                             Text('${allSongs.length} songs', style: TextStyle(fontSize: 14, color: t.textSec)),
                           ],
@@ -194,7 +198,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                         child: Container(
-                          decoration: BoxDecoration(color: t.surface, borderRadius: BorderRadius.circular(12), border: Border.all(color: t.border)),
+                          decoration: BoxDecoration(
+                            color: t.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: t.border),
+                          ),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                           child: Row(
                             children: [
@@ -224,20 +232,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         child: Row(
                           children: [
                             _FilterChip(
-                              label: 'Favorites', icon: Icons.favorite, active: _filterFavs, t: t,
-                              onTap: () => setState(() { _filterFavs = !_filterFavs; _filterArchived = false; }),
+                              label: 'Favorites',
+                              icon: Icons.favorite,
+                              active: _filterFavs,
+                              t: t,
+                              onTap: () => setState(() {
+                                _filterFavs = !_filterFavs;
+                                _filterArchived = false;
+                              }),
                             ),
                             const SizedBox(width: 8),
                             _FilterChip(
-                              label: 'Archived', icon: Icons.archive_outlined, active: _filterArchived, t: t, activeColor: t.textMuted,
-                              onTap: () => setState(() { _filterArchived = !_filterArchived; _filterFavs = false; }),
+                              label: 'Archived',
+                              icon: Icons.archive_outlined,
+                              active: _filterArchived,
+                              t: t,
+                              activeColor: t.textMuted,
+                              onTap: () => setState(() {
+                                _filterArchived = !_filterArchived;
+                                _filterFavs = false;
+                              }),
                             ),
                             if (!_filterArchived) ...[
                               const SizedBox(width: 8),
-                              _FilterChip(
-                                label: 'Sort', icon: Icons.sort, active: _showSort, t: t,
-                                onTap: () => setState(() => _showSort = !_showSort),
-                              ),
+                              _FilterChip(label: 'Sort', icon: Icons.sort, active: _showSort, t: t, onTap: () => setState(() => _showSort = !_showSort)),
                             ],
                           ],
                         ),
@@ -249,7 +267,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
                           child: Container(
                             decoration: BoxDecoration(
-                              color: t.surface, borderRadius: BorderRadius.circular(14), border: Border.all(color: t.border),
+                              color: t.surface,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: t.border),
                               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 30)],
                             ),
                             child: Column(
@@ -257,8 +277,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 for (final opt in [('date', 'Date Practiced'), ('progress', 'Progress'), ('title', 'Title'), ('artist', 'Artist')])
                                   GestureDetector(
                                     onTap: () => setState(() {
-                                      if (_sortBy == opt.$1) { _sortAsc = !_sortAsc; } 
-                                      else { _sortBy = opt.$1; _sortAsc = opt.$1 == 'title' || opt.$1 == 'artist'; }
+                                      if (_sortBy == opt.$1) {
+                                        _sortAsc = !_sortAsc;
+                                      } else {
+                                        _sortBy = opt.$1;
+                                        _sortAsc = opt.$1 == 'title' || opt.$1 == 'artist';
+                                      }
                                     }),
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -272,7 +296,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                             child: Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                Text(opt.$2, style: TextStyle(fontSize: 14, color: _sortBy == opt.$1 ? t.accent : t.text, fontWeight: _sortBy == opt.$1 ? FontWeight.w700 : FontWeight.w400)),
+                                                Text(
+                                                  opt.$2,
+                                                  style: TextStyle(fontSize: 14, color: _sortBy == opt.$1 ? t.accent : t.text, fontWeight: _sortBy == opt.$1 ? FontWeight.w700 : FontWeight.w400),
+                                                ),
                                                 if (_sortBy == opt.$1) Text(_sortDirectionLabel(opt.$1), style: TextStyle(fontSize: 11, color: t.accent)),
                                               ],
                                             ),
@@ -299,7 +326,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 child: LinearProgressIndicator(backgroundColor: t.border, color: t.accent, minHeight: 6),
                               ),
                               const SizedBox(height: 8),
-                              Text('AI is searching for the song tutorial...', style: TextStyle(color: t.accent, fontSize: 12, fontWeight: FontWeight.bold)),
+                              Text(
+                                'AI is searching for the song tutorial...',
+                                style: TextStyle(color: t.accent, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
                             ],
                           ),
                         ),
@@ -312,7 +342,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             if (songs.isEmpty && !appState.isLoadingAddSong)
                               Padding(
                                 padding: const EdgeInsets.symmetric(vertical: 40),
-                                child: Center(child: Text(_filterArchived ? 'No archived songs.' : 'No songs yet — add one!', style: TextStyle(fontSize: 14, color: t.textMuted))),
+                                child: Center(
+                                  child: Text(_filterArchived ? 'No archived songs.' : 'No songs yet — add one!', style: TextStyle(fontSize: 14, color: t.textMuted)),
+                                ),
                               ),
                             for (final s in songs) ...[
                               _SongCard(
@@ -334,7 +366,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
                                         TextButton(
                                           onPressed: () {
-                                            appState.deleteSong(s.id); 
+                                            appState.deleteSong(s.id);
                                             Navigator.pop(ctx);
                                           },
                                           child: const Text('Delete', style: TextStyle(color: Colors.red)),
@@ -342,7 +374,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                       ],
                                     ),
                                   );
-                                },  
+                                },
                               ),
                               const SizedBox(height: 10),
                             ],
@@ -360,18 +392,26 @@ class _LibraryScreenState extends State<LibraryScreen> {
         // Add Song FAB
         if (!_filterArchived)
           Positioned(
-            bottom: 20, left: 20,
+            bottom: 20,
+            left: 20,
             child: GestureDetector(
               onTap: () => setState(() => _showAddModal = true),
               child: Container(
-                decoration: BoxDecoration(color: t.accent, borderRadius: BorderRadius.circular(28), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 8)]),
+                decoration: BoxDecoration(
+                  color: t.accent,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.14), blurRadius: 8)],
+                ),
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: const [
                     Icon(Icons.add, size: 16, color: Colors.white),
                     SizedBox(width: 8),
-                    Text('Add Song', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                    Text(
+                      'Add Song',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
                   ],
                 ),
               ),
@@ -381,7 +421,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
         // Add Song Modal
         if (_showAddModal)
           GestureDetector(
-            onTap: () => setState(() { _showAddModal = false; _addError = null; }),
+            onTap: () => setState(() {
+              _showAddModal = false;
+              _addError = null;
+            }),
             child: Container(
               color: Colors.black.withValues(alpha: 0.4),
               alignment: Alignment.bottomCenter,
@@ -389,17 +432,37 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 onTap: () {},
                 child: Container(
                   width: double.infinity,
-                  decoration: BoxDecoration(color: t.surface, borderRadius: const BorderRadius.vertical(top: Radius.circular(24))),
+                  decoration: BoxDecoration(
+                    color: t.surface,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
                   padding: const EdgeInsets.fromLTRB(20, 24, 20, 36),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2)))),
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(color: t.border, borderRadius: BorderRadius.circular(2)),
+                        ),
+                      ),
                       const SizedBox(height: 20),
-                      Text('Add song to library', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: t.text)),
+                      Text(
+                        'Add song to library',
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: t.text),
+                      ),
                       const SizedBox(height: 18),
-                      _ModalField(label: 'SONG TITLE', hint: 'e.g. Stairway to Heaven', controller: _titleCtrl, t: t, onChanged: (_) { if (_addError != null) setState(() => _addError = null); }),
+                      _ModalField(
+                        label: 'SONG TITLE',
+                        hint: 'e.g. Stairway to Heaven',
+                        controller: _titleCtrl,
+                        t: t,
+                        onChanged: (_) {
+                          if (_addError != null) setState(() => _addError = null);
+                        },
+                      ),
                       if (_addError != null) ...[const SizedBox(height: 6), Text(_addError!, style: TextStyle(fontSize: 12, color: AppColors.red))],
                       const SizedBox(height: 12),
                       _ModalField(label: 'ARTIST', hint: 'e.g. Led Zeppelin', controller: _artistCtrl, t: t, onSubmit: () => _addSongAI(appState)),
@@ -408,8 +471,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         width: double.infinity,
                         child: ElevatedButton(
                           onPressed: () => _addSongAI(appState),
-                          style: ElevatedButton.styleFrom(backgroundColor: t.accent, padding: const EdgeInsets.symmetric(vertical: 15), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                          child: const Text('Add to Library', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: t.accent,
+                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                          child: const Text(
+                            'Add to Library',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
+                          ),
                         ),
                       ),
                     ],
@@ -439,14 +509,21 @@ class _FilterChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(color: active ? color : t.surface, borderRadius: BorderRadius.circular(20), border: Border.all(color: active ? color : t.border)),
+        decoration: BoxDecoration(
+          color: active ? color : t.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: active ? color : t.border),
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 13, color: active ? Colors.white : t.textSec),
             const SizedBox(width: 6),
-            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? Colors.white : t.textSec)),
+            Text(
+              label,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: active ? Colors.white : t.textSec),
+            ),
           ],
         ),
       ),
@@ -475,6 +552,7 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
   late final Animation<double> _glowAnim;
   double _offset = 0;
   double? _startX;
+  double _dragStartOffset = 0;
   bool _revealed = false;
   bool _pointerMoved = false;
 
@@ -484,7 +562,7 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
     _glowCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3));
     _glowAnim = TweenSequence<double>([
       TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0).chain(CurveTween(curve: Curves.easeOut)), weight: 15),
-      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 70), 
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.0), weight: 70),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0).chain(CurveTween(curve: Curves.easeIn)), weight: 15),
     ]).animate(_glowCtrl);
   }
@@ -527,7 +605,10 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                           children: const [
                             Icon(Icons.archive_outlined, size: 20, color: Colors.white),
                             SizedBox(height: 3),
-                            Text('Archive', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700)),
+                            Text(
+                              'Archive',
+                              style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+                            ),
                           ],
                         ),
                       ),
@@ -536,13 +617,19 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                       onTap: widget.onDelete,
                       child: Container(
                         width: 72,
-                        decoration: const BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.horizontal(right: Radius.circular(16))),
+                        decoration: const BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.horizontal(right: Radius.circular(16)),
+                        ),
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: const [
                             Icon(Icons.delete_outline, size: 20, color: Colors.white),
                             SizedBox(height: 3),
-                            Text('Delete', style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700)),
+                            Text(
+                              'Delete',
+                              style: TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+                            ),
                           ],
                         ),
                       ),
@@ -558,25 +645,41 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
             transform: Matrix4.translationValues(_offset, 0, 0),
             child: Listener(
               onPointerDown: (_) => _pointerMoved = false,
-              onPointerMove: (e) { if (e.delta.dy.abs() > 2) _pointerMoved = true; },
+              onPointerMove: (e) {
+                if (e.delta.dy.abs() > 2) _pointerMoved = true;
+              },
               child: GestureDetector(
-                onHorizontalDragStart: (d) => setState(() => _startX = d.globalPosition.dx),
+                onHorizontalDragStart: (d) => setState(() {
+                  _startX = d.globalPosition.dx;
+                  _dragStartOffset = _offset;
+                }),
                 onHorizontalDragUpdate: (d) {
                   if (_startX == null) return;
                   final dx = d.globalPosition.dx - _startX!;
-                  if (dx < 0) setState(() => _offset = dx.clamp(-144, 0));
+                  setState(() => _offset = (_dragStartOffset + dx).clamp(-144, 0));
                 },
                 onHorizontalDragEnd: (_) {
                   setState(() {
-                    if (_offset < -60) { _offset = -144; _revealed = true; } 
-                    else { _offset = 0; _revealed = false; }
+                    if (_offset < -60) {
+                      _offset = -144;
+                      _revealed = true;
+                    } else {
+                      _offset = 0;
+                      _revealed = false;
+                    }
                     _startX = null;
                   });
                 },
                 onTap: () {
                   if (_pointerMoved) return;
-                  if (_revealed) { setState(() { _offset = 0; _revealed = false; }); } 
-                  else { widget.onTap(); }
+                  if (_revealed) {
+                    setState(() {
+                      _offset = 0;
+                      _revealed = false;
+                    });
+                  } else {
+                    widget.onTap();
+                  }
                 },
                 child: AnimatedBuilder(
                   animation: _glowAnim,
@@ -608,7 +711,11 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(widget.song.title, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: widget.t.text), overflow: TextOverflow.ellipsis),
+                                  Text(
+                                    widget.song.title,
+                                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: widget.t.text),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                   Text(widget.song.artist, style: TextStyle(fontSize: 12, color: widget.t.textSec)), // ❌ 刪除 duration 問號
                                 ],
                               ),
@@ -617,9 +724,15 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                               GestureDetector(
                                 onTap: widget.onUnarchive,
                                 child: Container(
-                                  decoration: BoxDecoration(border: Border.all(color: widget.t.border), borderRadius: BorderRadius.circular(8)),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: widget.t.border),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                  child: Text('Restore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: widget.t.textSec)),
+                                  child: Text(
+                                    'Restore',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: widget.t.textSec),
+                                  ),
                                 ),
                               )
                             else if (widget.onFavToggle != null)
@@ -639,7 +752,10 @@ class _SongCardState extends State<_SongCard> with SingleTickerProviderStateMixi
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(widget.song.progressPercent == 100 ? 'Completed' : 'In progress', style: TextStyle(fontSize: 11, color: widget.song.progressPercent == 100 ? AppColors.green : widget.t.textMuted)),
+                              Text(
+                                widget.song.progressPercent == 100 ? 'Completed' : 'In progress',
+                                style: TextStyle(fontSize: 11, color: widget.song.progressPercent == 100 ? AppColors.green : widget.t.textMuted),
+                              ),
                               Text('${widget.song.progressPercent}%', style: TextStyle(fontSize: 11, color: widget.t.textMuted)),
                             ],
                           ),
@@ -672,7 +788,10 @@ class _ModalField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.textMuted, letterSpacing: 0.07 * 12)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: t.textMuted, letterSpacing: 0.07 * 12),
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
@@ -682,10 +801,20 @@ class _ModalField extends StatelessWidget {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: t.textMuted),
-            filled: true, fillColor: t.surfaceAlt,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: t.accent)),
+            filled: true,
+            fillColor: t.surfaceAlt,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: t.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: t.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: t.accent),
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
         ),
