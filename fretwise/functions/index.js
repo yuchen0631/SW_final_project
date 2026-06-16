@@ -459,14 +459,14 @@ User Data:\n\n${JSON.stringify(aiInput, null, 2)}`;
       console.log(`Plan Name: ${planObj.title || "Unknown"}`);
       console.log(`Total Days: ${daysArr.length}`);
       daysArr.forEach(day => {
-        const tasksForDay = tasksArr.filter(t => t.dayId === day.dayId);
+        const tasksForDay = tasksArr.filter(t => t.dayId === day.date);
         if (tasksForDay.length > 0) {
-          console.log(`- Day ${day.dayId}: ${tasksForDay.length} tasks scheduled.`);
+          console.log(`- Day ${day.date}: ${tasksForDay.length} tasks scheduled.`);
           tasksForDay.forEach(t => {
             console.log(`  -> ${t.title} (${t.minutes} mins)`);
           });
         } else {
-          console.log(`- Day ${day.dayId}: 0 tasks (Skipped)`);
+          console.log(`- Day ${day.date}: 0 tasks (Skipped)`);
         }
       });
       console.log("======================================");
