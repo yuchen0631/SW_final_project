@@ -45,9 +45,6 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
   bool _showDeadlineModal = false;
   String _deadlineDate = '';
   bool _deadlineSaved = false;
-  Map<String, dynamic>? _aiResponse;
-  bool _applyingPatch = false;
-  bool _showAiModal = false;
   bool _isSaving = false;
   String _targetDestination = 'home';
 
@@ -158,10 +155,20 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
 
       final result = await callable.call(payload);
       print('recordSession result: ${result.data}');
-      setState(() {
-        _aiResponse = result.data as Map<String, dynamic>?;
-        _showAiModal = true;
-      });
+      
+      final data = result.data as Map<String, dynamic>?;
+      if (data != null) {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
+        FirebaseFunctions.instance.httpsCallable('applyPatch').call({
+          'uid': uid,
+          'userProfilePatch': data['userProfilePatch'],
+          'songProfilePatch': data['songProfilePatch'],
+          'song': data['song'] ?? {
+            'title': widget.title,
+            'artist': widget.artist,
+          },
+        }).catchError((e) => print('Background applyPatch error: $e'));
+      }
 
       // Best-effort: set firstCompleteDate on user's songProfiles doc if missing
       final uid = FirebaseAuth.instance.currentUser?.uid ?? 'test_user_123';
@@ -219,11 +226,6 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
               'createdAt': FieldValue.serverTimestamp(),
               'sessionInfo': dummyAiResponse['sessionInfo'],
             });
-
-        setState(() {
-          _aiResponse = dummyAiResponse;
-          _showAiModal = true;
-        });
         print('recordSession fallback success');
       } catch (fallbackErr) {
         print('recordSession fallback error: $fallbackErr');
@@ -231,29 +233,7 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
     }
 
     setState(() => _isSaving = false);
-
-    // If the AI modal didn't open (Firebase error AND fallback error), go home directly
-    if (!_showAiModal) {
-      widget.navigate(_targetDestination);
-    }
-  }
-
-  void _navigateAfterApplyingSuggestions() {
-    if (_nextTask != null) {
-      widget.navigate(
-        'practicing',
-        props: {
-          'title': _nextTask!['songTitle'] ?? _nextTask!['title'],
-          'artist': _nextTask!['artist'],
-          'bpm': _nextTask!['bpm'],
-          'songId': _nextTask!['songId'],
-          'taskId': _nextTask!['id'],
-          'dayId': _nextTask!['dayId'],
-        },
-      );
-    } else {
-      widget.navigate(_targetDestination);
-    }
+    widget.navigate(_targetDestination);
   }
 
   @override
@@ -863,132 +843,6 @@ class _SessionCompleteScreenState extends State<SessionCompleteScreen> {
                       ],
                     ],
                   ),
-                ),
-              ),
-            ),
-          ),
-
-        // AI session summary modal
-        if (_showAiModal && _aiResponse != null)
-          GestureDetector(
-            onTap: () {},
-            child: Container(
-              color: Colors.black.withValues(alpha: 0.45),
-              alignment: Alignment.center,
-              child: Container(
-                width: 340,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: t.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: t.border),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'AI session summary',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: t.text,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    if (_aiResponse!['sessionInfo'] != null) ...[
-                      Text(
-                        _aiResponse!['sessionInfo']['aiComment'] ?? '',
-                        style: TextStyle(color: t.text),
-                      ),
-                      const SizedBox(height: 8),
-                      if ((_aiResponse!['sessionInfo']['nextFocus'] as List?)
-                              ?.isNotEmpty ??
-                          false) ...[
-                        Text(
-                          'Next focus:',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: t.text,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        for (var f
-                            in (_aiResponse!['sessionInfo']['nextFocus']
-                                as List))
-                          Text('- $f', style: TextStyle(color: t.textSec)),
-                        const SizedBox(height: 8),
-                      ],
-                    ],
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            setState(() {
-                              _showAiModal = false;
-                            });
-                            widget.navigate(_targetDestination);
-                          },
-                          child: Text(
-                            _nextTask != null ? 'Go Home' : 'Skip',
-                            style: TextStyle(color: t.text),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _applyingPatch
-                              ? null
-                              : () async {
-                                  setState(() => _applyingPatch = true);
-                                  try {
-                                    final uid =
-                                        FirebaseAuth
-                                            .instance
-                                            .currentUser
-                                            ?.uid ??
-                                        'test_user_123';
-                                    final callable = FirebaseFunctions.instance
-                                        .httpsCallable('applyPatch');
-                                    final payload = {
-                                      'uid': uid,
-                                      'userProfilePatch':
-                                          _aiResponse!['userProfilePatch'],
-                                      'songProfilePatch':
-                                          _aiResponse!['songProfilePatch'],
-                                      'song':
-                                          _aiResponse!['song'] ??
-                                          {
-                                            'title': widget.title,
-                                            'artist': widget.artist,
-                                          },
-                                    };
-                                    final resp = await callable.call(payload);
-                                    print('applyPatch resp: ${resp.data}');
-                                  } catch (e) {
-                                    print('applyPatch error: $e');
-                                  }
-                                  setState(() => _applyingPatch = false);
-                                  setState(() => _showAiModal = false);
-                                  _navigateAfterApplyingSuggestions();
-                                },
-                          child: _applyingPatch
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  _nextTask != null
-                                      ? 'Apply & Next Task'
-                                      : 'Apply Suggestions',
-                                ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ),
               ),
             ),
