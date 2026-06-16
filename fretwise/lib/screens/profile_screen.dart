@@ -248,61 +248,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: t.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: t.border),
-                          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4)],
-                        ),
-                        child: Column(
-                          children: [
-                            if (_purchasedItems.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: Center(child: Text('No items yet — visit the Shop!', style: TextStyle(fontSize: 13, color: t.textMuted))),
-                              )
-                            else
-                              for (int i = 0; i < _purchasedItems.length.clamp(0, 3); i++) ...[
-                                Padding(
-                                  padding: const EdgeInsets.all(14),
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 38, height: 38,
-                                        decoration: BoxDecoration(color: t.accentSoft, borderRadius: BorderRadius.circular(11)),
-                                        child: Center(child: Text(_purchasedItems[i].icon, style: const TextStyle(fontSize: 20))),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(_purchasedItems[i].name, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: t.text)),
-                                          Text(_purchasedItems[i].category, style: TextStyle(fontSize: 12, color: t.textSec)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (i < _purchasedItems.length.clamp(0, 3) - 1)
-                                  Divider(color: t.borderLight, height: 1, indent: 14, endIndent: 14),
-                              ],
-                            Divider(color: t.borderLight, height: 1),
+                      child: Column(
+                        children: [
+                          if (_purchasedItems.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: GestureDetector(
-                                onTap: () => widget.navigate('shop'),
+                              padding: const EdgeInsets.all(20),
+                              child: Center(child: Text('No items yet — visit the Shop!', style: TextStyle(fontSize: 13, color: t.textMuted))),
+                            )
+                          else
+                            for (int i = 0; i < _purchasedItems.length.clamp(0, 3); i++) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.storefront_outlined, size: 14, color: t.accent),
-                                    const SizedBox(width: 6),
-                                    Text('Go to Shop', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: t.accent)),
+                                    Container(
+                                      width: 68, height: 68,
+                                      decoration: BoxDecoration(color: t.accentSoft, shape: BoxShape.circle),
+                                      child: Center(child: Text(_purchasedItems[i].icon, style: const TextStyle(fontSize: 36))),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(_purchasedItems[i].name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: t.text)),
+                                        const SizedBox(height: 2),
+                                        Text(_purchasedItems[i].category, style: TextStyle(fontSize: 14, color: t.textSec)),
+                                      ],
+                                    ),
                                   ],
                                 ),
                               ),
+                              if (i < _purchasedItems.length.clamp(0, 3) - 1)
+                                Divider(color: t.borderLight, height: 1),
+                            ],
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () => widget.navigate('shop'),
+                            child: Row(
+                              children: [
+                                Icon(Icons.storefront_outlined, size: 12, color: t.accent),
+                                const SizedBox(width: 6),
+                                Text('Go to Shop', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: t.accent)),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                       ),
                     ),
                   ],
