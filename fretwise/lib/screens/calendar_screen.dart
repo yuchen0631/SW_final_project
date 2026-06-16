@@ -630,18 +630,19 @@ class _CalendarScreenState extends State<CalendarScreen>
                                       radius: 14,
                                     ),
                                     const SizedBox(width: 14),
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "No practice planned",
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: t.textMuted,
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "No practice planned",
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: t.textMuted,
+                                            ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ],
                                 ),
